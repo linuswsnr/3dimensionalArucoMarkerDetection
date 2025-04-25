@@ -35,7 +35,7 @@ Each team uses an independent setup consisting of an ESP32-CAM (with OV2640 came
 
 Example of a 5x5 ArUco marker:
 
-![Example ArUco Marker]5x5ArucoMarker
+![Example ArUco Marker]5x5ArucoMarker.jpeg
 
 ---
 
