@@ -12,6 +12,7 @@ This project aims to develop a system for **3D position and pose estimation of m
 - **Exchange pose data with other cameras via MQTT**
 
 ![Detection of Marker with Camera](PosePositionDetection.jpg)
+<img src="PosePositionDetection.jpg" alt="Detection of Marker with Camerar" width="50%">
 
 Each team uses an independent setup consisting of an ESP32-CAM (with OV2640 camera) and an ESP32 microcontroller. This repository belongs to **one team** within the larger multi-team project.
 
