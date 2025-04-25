@@ -11,9 +11,9 @@ This project aims to develop a system for **3D position and pose estimation of m
 - **Estimate its own position and orientation (pose)**
 - **Exchange pose data with other cameras via MQTT**
 
-![Detection of Marker with Camera](PosePositionDetection.jpg)
-<img src="PosePositionDetection.jpg" alt="Detection of Marker with Camerar" width="50%">
-
+<p align="center">
+  <img src="PosePositionDetection.jpg" alt="Detection of Marker with Camerar" width="50%">
+</p>
 Each team uses an independent setup consisting of an ESP32-CAM (with OV2640 camera) and an ESP32 microcontroller. This repository belongs to **one team** within the larger multi-team project.
 
 ---
@@ -38,7 +38,9 @@ Each team uses an independent setup consisting of an ESP32-CAM (with OV2640 came
 
 Example of a 5x5 ArUco marker:
 
-![Example ArUco Marker](5x5ArucoMarker.jpeg)
+<p align="center">
+  <img src="5x5ArucoMarker.jpg" alt="Example ArUco Marker">
+</p>
 
 ---
 
