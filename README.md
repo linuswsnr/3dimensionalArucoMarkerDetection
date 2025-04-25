@@ -13,7 +13,7 @@ This project aims to develop a system for **3D position and pose estimation of m
 
 Each team uses an independent setup consisting of an ESP32-CAM (with OV2640 camera) and an ESP32 microcontroller.
 
-> ⚠️ This repository belongs to **one team** within the larger multi-team project.
+> This repository belongs to **one team** within the larger multi-team project.
 
 ---
 
@@ -22,7 +22,6 @@ Each team uses an independent setup consisting of an ESP32-CAM (with OV2640 came
 - **Languages**: Python (image processing), C++/Arduino (ESP32)
 - **Libraries**:
   - `OpenCV` with `cv2.aruco` for marker detection
-  - `NumPy` for numerical operations
   - `paho-mqtt` or `umqtt` for MQTT communication
 - **Hardware**:
   - ESP32-CAM with OV2640 camera module
