@@ -13,7 +13,7 @@ This project aims to develop a system for **3D position and pose estimation of m
 
 
 <p align="center">
-  <img src="PosePositionDetection.jpg" alt="Detection of Marker with Camerar" width="50%">
+  <img src="PosePositionDetection.jpg" alt="Detection of Marker with Camera" width="50%">
 </p>
 
 
