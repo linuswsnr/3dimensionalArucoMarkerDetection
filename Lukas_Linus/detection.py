@@ -15,7 +15,7 @@ import numpy as np
 import traceback
 from datetime import datetime
 
-CAMERA_ID = 1
+CAMERA_ID = 5
 IP_ADDRESS_CAMERA = '172.20.10.7'
 URL = f'http://{IP_ADDRESS_CAMERA}:81/stream'
 
@@ -76,6 +76,10 @@ def get_aruco_markers(frame):
     """
     Detects ArUco markers in the given frame.
     Returns a list of detected markers with their IDs, distances, and angles.
+
+
+    !!! muss erst getestet werden !!!
+
     """
     aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_250)
     parameters = aruco.DetectorParameters()
