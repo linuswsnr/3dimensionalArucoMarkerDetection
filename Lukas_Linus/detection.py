@@ -16,7 +16,7 @@ import traceback
 from datetime import datetime
 
 CAMERA_ID = 5
-IP_ADDRESS_CAMERA = '172.20.10.7'
+IP_ADDRESS_CAMERA = '192.168.2.108'
 URL = f'http://{IP_ADDRESS_CAMERA}:81/stream'
 
 class ArucoMarker():
@@ -24,9 +24,9 @@ class ArucoMarker():
     Class representing an ArUco marker with its ID, distance, and angle in addition to the position of the camera which takes the image.
     """
     def __init__(self, detected_id, distance, angle, timestamp):
-        self.detected_id = detected_id
-        self.distance = distance
-        self.angle = angle
+        self.detected_id = int(detected_id)
+        self.distance = float(distance)
+        self.angle = float(angle)
         self.timestamp = timestamp
 
     def __repr__(self):
@@ -94,7 +94,7 @@ def get_aruco_markers(frame):
             # Calculate distance and angle (dummy values for example)
             distance = np.random.uniform(30, 100)  # Replace with actual distance calculation
             angle = np.random.uniform(-180, 180)   # Replace with actual angle calculation
-            positions.append((ids[i], distance, angle))
+            positions.append(((ids[i]), distance, angle))
         return positions
     else:
         print("No markers detected")	
@@ -149,20 +149,31 @@ detector = aruco.ArucoDetector(aruco_dict, parameters)
 # start the camera stream
 cap = setup_camera_stream()
 
-
-# update all markers every second
-prev_second = datetime.now().second
+markers = {}
+#prev_second = datetime.now().second
 while True:
-    now = datetime.now()
-    # check if a new full second has started
-    if now.second != prev_second:
-        frame, photo_timestamp = get_frame(cap)
-        detected_markers = get_marker_detections(frame, photo_timestamp)
-        for marker in detected_markers:
-            marker.update_position()
-            print(marker.__repr__())
-        prev_second = now.second
+    # now = datetime.now()
+    # # check if a new full second has started
+    # if now.second != prev_second:
+    frame, photo_timestamp = get_frame(cap)     
+    cv2.imshow("ESP32 Cam Stream", frame)  # ← wichtig für waitKey
+    detected_markers = get_marker_detections(frame, photo_timestamp)
+    for marker in detected_markers:
+        # marker erzeugen falls noch nicht vorhanden und position aktualisieren
+        if f"marker_{marker.detected_id}" not in markers:
+            new_marker = ArucoMarker(marker.detected_id, marker.distance, marker.angle, marker.timestamp)
+            markers[f"marker_{marker.detected_id}"] = new_marker
+        else:
+            # marker existiert bereits, also position aktualisieren
+            markers[f"marker_{marker.detected_id}"].distance = marker.distance
+            markers[f"marker_{marker.detected_id}"].angle = marker.angle
+            markers[f"marker_{marker.detected_id}"].timestamp = marker.timestamp
+            markers[f"marker_{marker.detected_id}"].update_position()
+        #print(markers[f"marker_{marker.detected_id}"].__repr__())
+        print(f"{detected_markers} \n")
 
+    if cv2.waitKey(10) & 0xFF == ord('q'):
+        break
 
 
 ## manually create a marker for testing purposes

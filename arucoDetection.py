@@ -2,7 +2,7 @@ import cv2
 import cv2.aruco as aruco
 
 # Replace with the IP address of your ESP32
-ip_address = '172.20.10.7'
+ip_address = '192.168.2.108'
 url = f'http://{ip_address}:81/stream'
 
 def main():
