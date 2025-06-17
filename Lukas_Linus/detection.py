@@ -100,19 +100,6 @@ def get_aruco_markers(frame):
         print("No markers detected")	
         return []
 
-def setup_camera_stream():
-    """
-    Sets up the video stream from the ESP32 camera.
-    Returns a VideoCapture object.
-    """
-    cap = cv2.VideoCapture(URL)
-    if not cap.isOpened():
-        print("Error: Cannot open video stream")
-        exit()
-    else:
-        print("Success: Starting video stream")
-    return cap
-
 def get_frame(cap):
     """
     Captures a frame from the video stream.
@@ -136,9 +123,18 @@ def get_marker_detections(frame, photo_timestamp):
         markers.append(marker)
     return markers
 
-
-
-
+def setup_camera_stream():
+    """
+    Sets up the video stream from the ESP32 camera.
+    Returns a VideoCapture object.
+    """
+    cap = cv2.VideoCapture(URL)
+    if not cap.isOpened():
+        print("Error: Cannot open video stream")
+        exit()
+    else:
+        print("Success: Starting video stream")
+    return cap
 
 # get the system ready
 
