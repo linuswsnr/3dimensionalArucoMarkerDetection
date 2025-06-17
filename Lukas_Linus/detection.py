@@ -14,18 +14,29 @@ import cv2.aruco as aruco
 import numpy as np
 import traceback
 from datetime import datetime
+import matplotlib.pyplot as plt     
+import matplotlib.animation as animation
+
+
+from Visualisation import redraw_marker_camera_network
 
 CAMERA_ID = 5
 IP_ADDRESS_CAMERA = '192.168.2.108'
 URL = f'http://{IP_ADDRESS_CAMERA}:81/stream'
 
-# Variablen für Kamerakalibrierung
-fx, fy, cx, cy = 299.6479, 307.0981, 161.4847, 126.4022
-k1, k2, p1, p2, k3 = -0.0657, 0.4584, 0, 0, 0
+# Kamera-Kalibrierungsparameter
+# Werte aus MATLAB
+fx, fy = 306.9462, 314.8131
+cx, cy = 159.3294, 119.3385
+k1, k2 = -0.0323, 0.0464
+p1, p2 = 0.0, 0.0
+k3 = 0.0 
 
-CAMERA_MATRIX = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=np.float32)
+CAMERA_MATRIX = np.array([[fx, 0, cx],
+                          [0, fy, cy],
+                          [0,  0,  1]], dtype=np.float32)
 DISTCOEFFS = np.array([k1, k2, p1, p2, k3], dtype=np.float32)
-MARKERLENGTH = 0.3
+MARKERLENGTH = 0.2
 
 class ArucoMarker():
     """
@@ -141,6 +152,7 @@ def setup_camera_stream():
         print("Success: Starting video stream")
     return cap
 
+
 # get the system ready
 
 # Load predefined dictionary
@@ -151,24 +163,60 @@ detector = aruco.ArucoDetector(aruco_dict, parameters)
 cap = setup_camera_stream()
 
 markers = {}
-#prev_second = datetime.now().second
+prev_second = datetime.now().second
+
+plt.ion()
+fig, ax = plt.subplots(figsize=(8, 8))
+ax.set_xlim(-0.1, 0.1)
+ax.set_ylim(-0.1, 0.1)
+ax.set_xlabel("X [m]")
+ax.set_ylabel("Y [m]")
+ax.set_title("Rekonstruiertes Marker-Kamera-Netzwerk")
+ax.grid(True)
+
 while True:
-    # now = datetime.now()
-    # # check if a new full second has started
-    # if now.second != prev_second:
+    now = datetime.now()
+
     frame, photo_timestamp = get_frame(cap)     
     cv2.imshow("ESP32 Cam Stream", frame)  # ← wichtig für waitKey
     detected_markers = get_marker_detections(frame, photo_timestamp)
     for marker in detected_markers:
         # marker erzeugen falls noch nicht vorhanden und position aktualisieren
-        if f"marker_{marker.detected_id}" not in markers:
-            marker.update_position()
-            markers[f"marker_{marker.detected_id}"] = marker
+        markers[f"marker_{marker.detected_id}"] = marker
         print(markers[f"marker_{marker.detected_id}"].__repr__())
+        marker.update_position()
     #print(f"{detected_markers} \n")
+    # check if a new full second has started
+    if now.second != prev_second:
+        camera_positions, marker_positions = redraw_marker_camera_network()
+        prev_second = now.second
+
+        ax.clear()
+        ax.set_xlim(-0.5, 0.5)
+        ax.set_ylim(-0.5, 0.5)
+        ax.set_xlabel("X [m]")
+        ax.set_ylabel("Y [m]")
+        ax.set_title("Rekonstruiertes Marker-Kamera-Netzwerk")
+        ax.grid(True)
+
+        for cam_id, pos in camera_positions.items():
+            circle = plt.Circle((pos[0], pos[1]), 0.005, color='green', fill=True)
+            ax.add_artist(circle)
+            # Radius 0.005 m = 0.5 cm Durchmesser
+            ax.plot(pos[0], pos[1], 'ro')
+            ax.text(pos[0] - 0.01, pos[1] - 0.01, cam_id, color='green')
+
+        for marker_id, pos in marker_positions.items():
+            ax.plot(pos[0], pos[1], 'bs')
+            ax.text(pos[0] + 0.01, pos[1] + 0.01, marker_id, color='blue')
+
+        fig.canvas.draw()
+        fig.canvas.flush_events()
 
     if cv2.waitKey(10) & 0xFF == ord('q'):
         break
+
+
 
 
 ## manually create a marker for testing purposes
