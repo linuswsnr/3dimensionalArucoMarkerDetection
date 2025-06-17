@@ -19,25 +19,33 @@ CAMERA_ID = 5
 IP_ADDRESS_CAMERA = '192.168.2.108'
 URL = f'http://{IP_ADDRESS_CAMERA}:81/stream'
 
+# Variablen für Kamerakalibrierung
+fx, fy, cx, cy = 299.6479, 307.0981, 161.4847, 126.4022
+k1, k2, p1, p2, k3 = -0.0657, 0.4584, 0, 0, 0
+
+CAMERA_MATRIX = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=np.float32)
+DISTCOEFFS = np.array([k1, k2, p1, p2, k3], dtype=np.float32)
+MARKERLENGTH = 0.3
+
 class ArucoMarker():
     """
     Class representing an ArUco marker with its ID, distance, and angle in addition to the position of the camera which takes the image.
     """
-    def __init__(self, detected_id, distance, angle, timestamp):
+    def __init__(self, detected_id, rvecs, tvecs, timestamp):
         self.detected_id = int(detected_id)
-        self.distance = float(distance)
-        self.angle = float(angle)
+        self.rvecs = rvecs
+        self.tvecs = tvecs
         self.timestamp = timestamp
 
     def __repr__(self):
-        return f"ArucoMarker(id={self.detected_id}, distance={self.distance}, angle={self.angle}, timestamp={self.timestamp})"
+        return f"ArucoMarker(id={self.detected_id}, rvecs={self.rvecs}, tvecs={self.tvecs}, timestamp={self.timestamp})"
 
     def update_position(self):
         """
         Updates the position of the marker in marker_positions.json.
         """
         # Load existing marker positions from JSON file
-        with open ('Lukas_Linus/marker_positions.json', 'r') as file:
+        with open ('Lukas_Linus/marker_positions_rvecs_tvecs.json', 'r') as file:
             marker_positions = json.load(file)
 
         # check if camera dict contains the if of the camera
@@ -55,23 +63,24 @@ class ArucoMarker():
                 # find detected_id if existing and update values                            
                 for other in camera_dict['Others']:                 
                     if other['detected_id'] == self.detected_id:
-                        other['Position'] = [{'Distance': self.distance, 'Angle': self.angle}]
+                        other['Position'] = [{'rvecs': self.rvecs}, {'tvecs': self.tvecs}]
                         camera_dict["time"] = self.timestamp
-                        with open('Lukas_Linus/marker_positions.json', 'w') as f:
+                        with open('Lukas_Linus/marker_positions_rvecs_tvecs.json', 'w') as f:
                             json.dump(marker_positions, f, indent=4)
                         return
                 # append new detected block if detected_id not found
                 camera_dict['Others'].append({
                     'detected_id': self.detected_id,
                     'Position': [
-                        {'Distance': self.distance, 'Angle': self.angle}
+                        {'rvecs': self.rvecs}, {'tvecs': self.tvecs}
                     ]
                 })
                 camera_dict["time"] = self.timestamp
-                with open('Lukas_Linus/marker_positions.json', 'w') as f:
+                with open('Lukas_Linus/marker_positions_rvecs_tvecs.json', 'w') as f:
                     json.dump(marker_positions, f, indent=4)
                 return
-
+            else:
+                print(f"Camera ID {CAMERA_ID} not found in marker_positions.json")
 def get_aruco_markers(frame):
     """
     Detects ArUco markers in the given frame.
@@ -84,21 +93,17 @@ def get_aruco_markers(frame):
     aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_250)
     parameters = aruco.DetectorParameters()
     detector = aruco.ArucoDetector(aruco_dict, parameters)
-
     corners, ids, _ = detector.detectMarkers(frame)
     
     if ids is not None:
         ids = ids.flatten()
-        positions = []
-        for i in range(len(ids)):
-            # Calculate distance and angle (dummy values for example)
-            distance = np.random.uniform(30, 100)  # Replace with actual distance calculation
-            angle = np.random.uniform(-180, 180)   # Replace with actual angle calculation
-            positions.append(((ids[i]), distance, angle))
-        return positions
+        rvecs, tvecs, _ = aruco.estimatePoseSingleMarkers(corners, MARKERLENGTH, CAMERA_MATRIX, DISTCOEFFS)
+        rvecs = rvecs[0].tolist()
+        tvecs = tvecs[0].tolist()
+        return ids, rvecs, tvecs
     else:
         print("No markers detected")	
-        return []
+        return [], [], []
 
 def get_frame(cap):
     """
@@ -116,10 +121,10 @@ def get_marker_detections(frame, photo_timestamp):
     """
     Detects ArUco markers in the given frame and returns a list of ArucoMarker objects.
     """
-    positions = get_aruco_markers(frame)
+    ids, rvecs, tvecs = get_aruco_markers(frame)
     markers = []
-    for detected_id, distance, angle in positions:
-        marker = ArucoMarker(detected_id, distance, angle, photo_timestamp)
+    for detected_id, rvec, tvec in zip(ids, rvecs, tvecs):
+        marker = ArucoMarker(detected_id, rvec, tvec, photo_timestamp)
         markers.append(marker)
     return markers
 
@@ -157,16 +162,10 @@ while True:
     for marker in detected_markers:
         # marker erzeugen falls noch nicht vorhanden und position aktualisieren
         if f"marker_{marker.detected_id}" not in markers:
-            new_marker = ArucoMarker(marker.detected_id, marker.distance, marker.angle, marker.timestamp)
-            markers[f"marker_{marker.detected_id}"] = new_marker
-        else:
-            # marker existiert bereits, also position aktualisieren
-            markers[f"marker_{marker.detected_id}"].distance = marker.distance
-            markers[f"marker_{marker.detected_id}"].angle = marker.angle
-            markers[f"marker_{marker.detected_id}"].timestamp = marker.timestamp
-            markers[f"marker_{marker.detected_id}"].update_position()
-        #print(markers[f"marker_{marker.detected_id}"].__repr__())
-        print(f"{detected_markers} \n")
+            marker.update_position()
+            markers[f"marker_{marker.detected_id}"] = marker
+        print(markers[f"marker_{marker.detected_id}"].__repr__())
+    #print(f"{detected_markers} \n")
 
     if cv2.waitKey(10) & 0xFF == ord('q'):
         break
