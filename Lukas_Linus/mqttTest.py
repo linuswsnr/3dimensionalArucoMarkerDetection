@@ -6,6 +6,10 @@ CAMERA_ID = 5  # gewünschte ID
 def on_message(client, userdata, msg):
     print(f"Nachricht empfangen auf Topic: {msg.topic}")
     print(f"Payload:\n{msg.payload.decode()}")
+    id = str(msg.topic)[-1]
+    
+        # Hier kannst du die empfangene Nachricht verarbeiten
+        print(f"Empfangene Nachricht für ID {CAMERA_ID}: {msg.payload.decode()}")
 
 # MQTT-Konfiguration
 broker = "test.mosquitto.org"
