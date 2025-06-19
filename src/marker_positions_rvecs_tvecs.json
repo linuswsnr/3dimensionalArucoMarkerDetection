@@ -40,14 +40,10 @@
                 "detected_id": "",
                 "Position": [
                     {
-                        "rvecs": [
-                            "hallo"
-                        ]
+                        "rvecs": []
                     },
                     {
-                        "tvecs": [
-                            "hallo"
-                        ]
+                        "tvecs": []
                     }
                 ]
             }
@@ -75,26 +71,18 @@
         "id": 5,
         "Others": [
             {
-                "detected_id": "0",
+                "detected_id": "",
                 "Position": [
                     {
-                        "rvecs": [
-                            20,
-                            20,
-                            0
-                        ]
+                        "rvecs": []
                     },
                     {
-                        "tvecs": [
-                            0,
-                            0,
-                            0
-                        ]
+                        "tvecs": []
                     }
                 ]
             }
         ],
-        "time": "2025-06-19 16:37:27.222001"
+        "time": "2025-06-19 18:53:24.763906"
     },
     {
         "id": 6,

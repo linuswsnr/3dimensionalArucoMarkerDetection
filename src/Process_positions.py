@@ -1,11 +1,12 @@
 import numpy as np
-import matplotlib.pyplot as plt  
-import cv2 
-from collections import defaultdict, deque  
-import json
+import matplotlib.pyplot as plt
+import cv2
+from collections import defaultdict, deque  # <- deque hier hinzufügen
+from matplotlib.lines import Line2D
 
-def redraw_marker_camera_network():
 
+
+def redraw_marker_camera_network(data):
 
     # Zuordnung: Welche Marker gehören zu welcher Kamera
     marker_to_camera = {
@@ -17,20 +18,38 @@ def redraw_marker_camera_network():
         60: 6, 61: 6, 62: 6, 63: 6
     }
 
-    def get_camera_position_from_marker(rvec, tvec, marker_global_pos):
-        rvec = np.array(rvec, dtype=np.float64)
+    def get_camera_position_from_marker(rvec, tvec, marker_global_pos, detected_marker_id):
         tvec = np.array(tvec, dtype=np.float64).reshape((3, 1)) / 100.0
-        R, _ = cv2.Rodrigues(rvec)
+
+        # Ausrichtung der Marker ID verwenden → Blickrichtung ableiten
+        # Angenommen: Kamera "sieht" Marker mit ID → daraus folgt: Kamera zeigt in Richtung des Markers
+        direction_type = detected_marker_id % 10  # z.B. Marker 13 → 3 (negativ Y)
+        rotation_map = {
+            0: 90.0,  # Kamera schaut gegen +X → also -X
+            1: 180.0,  # Kamera schaut gegen +Y → also -Y
+            2: -90.0,    # Marker schaut -X → Kamera schaut +X
+            3: 0.0    # Marker schaut -Y → Kamera schaut +Y
+        }
+
+        angle_deg = rotation_map.get(direction_type, 0.0)
+        angle_rad = np.deg2rad(angle_deg)
+
+        # Erzeuge einfache Rotationsmatrix in Z-Achse
+        cos_a, sin_a = np.cos(angle_rad), np.sin(angle_rad)
+        R = np.array([
+            [cos_a, -sin_a, 0],
+            [sin_a,  cos_a, 0],
+            [0,      0,     1]
+        ])
+
         cam_pos = marker_global_pos.reshape((3, 1)) - R @ tvec
         return cam_pos
+
 
     # Initialisiere bekannte Positionen
     camera_positions = {}  # id -> np.array([x, y, z])
     marker_positions = {}  # id -> np.array([x, y, z])
     edges = defaultdict(list)
-
-    with open ('src/marker_positions_rvecs_tvecs.json', 'r') as file:
-        data = json.load(file)
 
     # Verknüpfungen zwischen Kamera und Marker
     for entry in data:
@@ -48,30 +67,67 @@ def redraw_marker_camera_network():
                 except:
                     continue
 
-    # Setze Marker 0 als Ursprung
-    marker_positions["M0"] = np.array([0.0, 0.0, 0.0])
-    queue = deque(["M0"])
+    # Nullpunkt-Würfel aus beliebigem Marker 0, 1, 2 oder 3 ableiten
+    initial_marker_ids = {"0": np.array([0.015, 0.0, 0.0]),   # M0 in +X
+                        "1": np.array([0.0, 0.015, 0.0]),   # M1 in +Y
+                        "2": np.array([-0.015, 0.0, 0.0]),  # M2 in -X
+                        "3": np.array([0.0, -0.015, 0.0])}  # M3 in -Y
 
-    # Rekursive Bestimmung
+    for entry in data:
+        for other in entry["Others"]:
+            marker_id = str(other["detected_id"])
+            if marker_id in initial_marker_ids and marker_id not in marker_positions:
+                rvecs = other["Position"][0]["rvecs"]
+                tvecs = other["Position"][1]["tvecs"]
+                if rvecs and tvecs:
+                    tvec = np.array(tvecs, dtype=np.float64).reshape((3,1)) / 100.0
+                    offset = initial_marker_ids[marker_id].reshape((3,1))
+                    marker_global = np.zeros((3,1)) + offset - tvec  # Kamera bei Ursprung
+                    marker_positions[f"M{marker_id}"] = marker_global.flatten()
+
+    # Ergänze die restlichen Marker (M0–M3), wenn einer bekannt ist
+    for id_str, offset in initial_marker_ids.items():
+        label = f"M{id_str}"
+        if label in marker_positions:
+            origin = marker_positions[label] - offset  # Ursprung errechnen
+            for other_id, delta in initial_marker_ids.items():
+                other_label = f"M{other_id}"
+                if other_label not in marker_positions:
+                    marker_positions[other_label] = origin + delta
+            break  # Sobald ein Ursprung gefunden ist, reicht das
+    queue = deque(marker_positions.keys())
+
+
     # Rekursive Bestimmung
     while queue:
         current = queue.popleft()
+
         if current.startswith("M"):
             marker_id = current
             for neighbor, rvecs, tvecs in edges[marker_id]:
                 if neighbor not in camera_positions:
-                    cam_pos = get_camera_position_from_marker(rvecs, tvecs, marker_positions[marker_id])
+                    marker_num = int(marker_id[1:])
+                    cam_pos = get_camera_position_from_marker(rvecs, tvecs, marker_positions[marker_id], marker_num)
                     camera_positions[neighbor] = cam_pos
                     queue.append(neighbor)
 
-                    # Wenn Kamera-Position bekannt wird, dann Marker dieser Kamera ebenfalls setzen
+                    # Richtungsbasierte Markerplatzierung für Kamera
                     try:
-                        cam_num = int(neighbor[1:])  # "C2" -> 2
+                        cam_num = int(neighbor[1:])  # "C2" → 2
                         for marker_id_local, marker_cam in marker_to_camera.items():
                             if marker_cam == cam_num:
                                 marker_label = f"M{marker_id_local}"
                                 if marker_label not in marker_positions:
-                                    marker_positions[marker_label] = cam_pos.copy()
+                                    # Offset nach Marker-Typ definieren
+                                    marker_type = marker_id_local % 10
+                                    relative_offsets = {
+                                        0: np.array([0.015, 0.0, 0.0]),   # +X
+                                        1: np.array([0.0, 0.015, 0.0]),   # +Y
+                                        2: np.array([-0.015, 0.0, 0.0]),  # -X
+                                        3: np.array([0.0, -0.015, 0.0])   # -Y
+                                    }
+                                    offset = relative_offsets.get(marker_type, np.zeros(3))
+                                    marker_positions[marker_label] = cam_pos.flatten() + offset
                                     queue.append(marker_label)
                     except:
                         pass
@@ -88,4 +144,32 @@ def redraw_marker_camera_network():
                     marker_positions[neighbor] = marker_pos.flatten()
                     queue.append(neighbor)
 
-    return camera_positions, marker_positions  
+    return camera_positions, marker_positions
+
+# Plotting
+# plt.figure(figsize=(8, 8))
+# ax = plt.gca()
+
+# for cam_id, pos in camera_positions.items():
+#     circle = plt.Circle((pos[0], pos[1]), 0.05, color='green', fill=True)  # Radius 0.05 m = 10 cm Durchmesser
+#     ax.add_patch(circle)
+#     plt.text(pos[0] + 0.05, pos[1] + 0.05, cam_id, color='green')
+
+# for marker_id, pos in marker_positions.items():
+#     plt.plot(pos[0], pos[1], 'bs')  # kleiner blauer Punkt
+#     plt.text(pos[0] + 0.01, pos[1] + 0.01, marker_id, color='blue')
+    
+# legend_elements = [
+#     Line2D([0], [0], marker='o', color='w', label='Kamera', markerfacecolor='green', markersize=10),
+#     Line2D([0], [0], marker='s', color='w', label='ArUco Marker', markerfacecolor='blue', markersize=10)
+# ]
+# plt.legend(handles=legend_elements, loc='upper right')
+# plt.grid(True)
+# plt.xlabel("x [m]")
+# plt.ylabel("y [m]")
+# plt.title("Rekonstruiertes Kamera-ArUco-Marker-Netzwerk")
+# plt.suptitle("Verinfachte Annahme: 1.Kamera erkennt ihre Position 2.Kamera richtet sich dort so aus, dass 0 in pos. x-Richtung im Graphen zeigt ", fontsize=10, y=+0.001)
+# plt.axis("equal")
+# plt.show()
+
+
