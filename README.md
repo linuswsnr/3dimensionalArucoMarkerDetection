@@ -84,15 +84,15 @@ Each team uses an independent setup consisting of an ESP32-CAM (with OV2640 came
 
 When using ArUco markers for pose estimation, `tvecs` and `rvecs` provide the position and orientation of a marker relative to the camera.
 
-- **`tvecs = [tx, ty, tz]`**  
-  Represents the translation of the marker relative to the camera center -> position
+- **`tvecs = [tx, ty, tz]` -> position relative to camera**  
+  Represents the translation of the marker relative to the camera center
   - `tx`: translation along the camera's X-axis (sideways)  
   - `ty`: translation along the camera's Y-axis (upwards)  
   - `tz`: translation along the camera's Z-axis (forwards)  
   The unit depends on the calibration, typically meters or centimeters.  
 
-- **`rvecs = [rx, ry, rz]`**  
-  Describes the rotation of the marker relative to the camera using axis-angle representation -> orientation
+- **`rvecs = [rx, ry, rz]` -> orientation relative to camera**  
+  Describes the rotation of the marker relative to the camera using axis-angle representation 
   - The direction of the vector indicates the rotation axis.  
   - The magnitude ‖rvec‖ is the rotation angle in radians.  
   This can be converted into a 3×3 rotation matrix using the Rodrigues formula.
