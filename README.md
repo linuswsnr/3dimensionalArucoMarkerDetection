@@ -78,14 +78,7 @@ Each team uses an independent setup consisting of an ESP32-CAM (with OV2640 came
 
 - Each marker encodes a unique ID in a 6x6 bit pattern.
 - A solid black border improves edge detection.
-- **Pose (translation and rotation)** is calculated using the marker's corners, known size, and intrinsic camera parameters.
-
-Example of a 5x5 ArUco marker:
-
-
-<p align="center">
-  <img src="5x5ArucoMarker.jpeg" alt="Example ArUco Marker">
-</p>
+- Pose (translation and rotation) is calculated using the marker's corners, known size, and intrinsic camera parameters.
 
 
 
