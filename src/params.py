@@ -17,7 +17,7 @@ CAMERA_MATRIX = np.array([[fx, 0, cx],
                           [0, fy, cy],
                           [0,  0,  1]], dtype=np.float32)
 DISTCOEFFS = np.array([k1, k2, p1, p2, k3], dtype=np.float32)
-MARKERLENGTH = 0.3
+MARKERLENGTH = 0.03
 
 TOPIC_1 = "EZS/beschtegruppe/1"
 TOPIC_2 = "EZS/beschtegruppe/2"

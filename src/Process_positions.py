@@ -2,6 +2,7 @@
 
 import json
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import cv2
 import math
@@ -9,6 +10,35 @@ import params
 
 # mehr nachkommastellen für bessere Genauigkeit
 np.set_printoptions(precision=10, suppress=True)
+
+def build_camera_pose_dataframe(solved_cameras_dict):
+    """
+    Erstellt einen DataFrame mit Position und Blickrichtung der Kameras.
+
+    Args:
+        solved_cameras_dict (dict): {camera_id: 4x4-Transformationsmatrix}
+
+    Returns:
+        pd.DataFrame: Enthält id, x, z, dir_x, dir_z, angle_rad, angle_deg
+    """
+    data = []
+    for cam_id, T in solved_cameras_dict.items():
+        x = T[0, 3]
+        z = T[2, 3]
+        dir_x = T[0, 2]
+        dir_z = T[2, 2]
+        angle_rad = np.arctan2(dir_z, dir_x)
+        angle_deg = np.degrees(angle_rad)
+        data.append({
+            'id': cam_id,
+            'x': x,
+            'z': z,
+            'dir_x': dir_x,
+            'dir_z': dir_z,
+            'angle_rad': angle_rad,
+            'angle_deg': angle_deg
+        })
+    return pd.DataFrame(data)
 
 def load_valid_marker_data(path):
     with open(path, 'r') as f:
@@ -71,54 +101,99 @@ def rvec_tvec_to_matrix(rvec, tvec):
     T[:3, 3] = np.array(tvec).reshape(3)
     return T
 
-###############
+def visualize_camera_positions(df):
+    """
+    Visualisiert die Positionen und Blickrichtungen der Kameras in der XZ-Ebene.
+
+    Args:
+        df (pd.DataFrame): Muss Spalten enthalten: id, x, z, dir_x, dir_z
+    """
+    windowsize = 1
+    marker_text_distance = windowsize / 10
+    cam_text_distance = windowsize / 15
+    arrow_length = windowsize / 10
+    arrow_head_width = windowsize / 30
+    arrow_head_length = windowsize / 20
+
+    fig, ax = plt.subplots(figsize=(6, 6))
+    
+    # Nullpunktwürfel zeichnen
+    cube = plt.Rectangle((-params.MARKERLENGTH / 2, -params.MARKERLENGTH / 2), params.MARKERLENGTH, params.MARKERLENGTH, color='grey', alpha=1, label='Nullpunktwürfel', zorder=4)
+    ax.add_patch(cube)
+    ax.text(marker_text_distance, 0, "M1", fontsize=9, ha='center', va='center', color='black')
+    ax.text(0, -marker_text_distance, "M2", fontsize=9, ha='center', va='center', color='black')
+    ax.text(-marker_text_distance, 0, "M3", fontsize=9, ha='center', va='center', color='black')
+    ax.text(0, marker_text_distance, "M0", fontsize=9, ha='center', va='center', color='black')
+
+    # Positionen und Blickrichtungen einzeichnen
+    for _, row in df.iterrows():
+        x, z = row['x'], row['z']
+        dx, dz = row['dir_x'], row['dir_z']
+        cam_id = row['id']
+
+        ax.plot(x, z, 'bo')  # Kameraposition als blauer Punkt
+        ax.arrow(x, z, dx * arrow_length, dz * arrow_length, head_width=arrow_head_width, head_length=arrow_head_length, fc='r', ec='r', zorder=4)  # Blickrichtung
+        ax.text(x + cam_text_distance, z + cam_text_distance, f"Cam {int(cam_id)}", fontsize=9)
+
+    # Achsenformat
+    ax.set_xlim(-windowsize, windowsize)
+    ax.set_ylim(-windowsize, windowsize)
+    ax.set_xlabel("X")
+    ax.set_ylabel("Z")
+    ax.set_title("Globale Camera Positions and Directions")
+    ax.grid(False, zorder=5)  
+    ax.set_aspect('equal')
+    plt.tight_layout()
+    plt.show()
 
 
-# Daten einlesen
-json_path = "src\\marker_positions_rvecs_tvecs.json"
 
-camera_views = load_valid_marker_data(json_path)
-print("Kamera-Ansichten geladen:", camera_views)
-
-cam_id, anchor_detection = find_anchor_camera(camera_views, camera_priority_id=5)
-if cam_id is not None:
-    print(f"Kamera {cam_id} erkennt Marker {anchor_detection['detected_id']}")
-else:
-    print("Keine Kamera erkennt einen Anker-Marker.")
+#--------------------------------------------------------------------------------#
+# Hauptprogramm
+#--------------------------------------------------------------------------------#
 
 
 # 1. Lade Daten
 camera_views = load_valid_marker_data("src/marker_positions_rvecs_tvecs.json")
+print("\n1. Kamera-Ansichten geladen:", camera_views)
 
-# 2. Finde Anker-Kamera (z. B. bevorzugt Kamera 5)
+# 2. leere Kamera-Ansichten entfernen
+camera_views = {k: v for k, v in camera_views.items() if v}
+print("\n2. Kamera-Ansichten nach Entfernen leerer Einträge:", camera_views)
+
+# 3. Finde Anker-Kamera (z. B. bevorzugt Kamera 5)
 anchor_cam_id, anchor_detection = find_anchor_camera(camera_views, params.CAMERA_ID, params.ANCHOR_MARKER_IDS)
-
+print(f"\n3. Anker-Kamera gefunden: {anchor_cam_id}, Marker-Detektion: {anchor_detection}")
 if anchor_cam_id is None:
     raise ValueError("Keine Ankerkamera erkannt.")
+    exit(1)
 
-# 3. Berechne globale Pose der Ankerkamera
+# 4. Berechne globale Pose der Ankerkamera, update unsolved cameras and solved cameras
+
 Transformer_matrix_marker_to_cam = rvec_tvec_to_matrix(anchor_detection['rvec'], anchor_detection['tvec'])
 Transformer_matrix_cam_to_marker = np.linalg.inv(Transformer_matrix_marker_to_cam)
 
 anchor_marker_id = anchor_detection['detected_id']
+
 Transformer_matrix_marker_to_global = params.ANCHOR_MARKER_WORLD_POSES[anchor_marker_id]
 Transformer_matrix_cam_to_global = Transformer_matrix_marker_to_global @ Transformer_matrix_cam_to_marker
+Transformer_matrix_global_to_cam = np.linalg.inv(Transformer_matrix_cam_to_global)
 
-solved_cameras = {anchor_cam_id: Transformer_matrix_cam_to_global}
-unsolved_cameras = set(camera_views.keys()) - {anchor_cam_id}
+solved_cameras = {anchor_cam_id: Transformer_matrix_global_to_cam}
 
-print(f"Ankerkamera: {anchor_cam_id}, sieht Marker {anchor_marker_id}")
-print("T_cam_to_global:")
-print(Transformer_matrix_cam_to_global)
-print("________________")
-print("T_marker_to_global:")
-for row in Transformer_matrix_marker_to_global:
-    print([f"{v:.6f}" for v in row])
 
-print("\nT_cam_to_marker (invertiert):")
-for row in Transformer_matrix_cam_to_marker:
-    print([f"{v:.6f}" for v in row])
+print("Transformationsmatrix Anker Kamera zu Nullpunktwürfel:")
+print(Transformer_matrix_global_to_cam)
 
-print("\nT_cam_to_global (Resultat):")
-for row in Transformer_matrix_cam_to_global:
-    print([f"{v:.6f}" for v in row])
+
+# 5. Iteriere über alle Kameras und berechne deren globale Posen
+
+
+
+# 10. Dataframe erstellen mit allen Kamoerapositionen und deren Blickrichtungen
+global_camera_poses_positions = build_camera_pose_dataframe(solved_cameras)
+print("\n10. DataFrame mit Kamerapositionen und Blickrichtungen:")
+print(global_camera_poses_positions)
+print("\nSolved cameras:\n", solved_cameras)
+
+visualize_camera_positions(global_camera_poses_positions)
