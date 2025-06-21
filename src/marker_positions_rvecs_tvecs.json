@@ -37,13 +37,24 @@
         "id": 3,
         "Others": [
             {
-                "detected_id": "",
+                "detected_id": "0",
                 "Position": [
                     {
-                        "rvecs": []
+                        "rvecs": [0, 0, 7854]
                     },
                     {
-                        "tvecs": []
+                        "tvecs": [0.8, 0, 0.5]
+                    }
+                ]
+            },
+                        {
+                "detected_id": "41",
+                "Position": [
+                    {
+                        "rvecs": [0, 0, 0.7854]
+                    },
+                    {
+                        "tvecs": [0.35, 0, 0.25]
                     }
                 ]
             }
@@ -71,13 +82,13 @@
         "id": 5,
         "Others": [
             {
-                "detected_id": "",
+                "detected_id": "21",
                 "Position": [
                     {
-                        "rvecs": []
+                        "rvecs": [0, 0, 0]
                     },
                     {
-                        "tvecs": []
+                        "tvecs": [0.20, 0.10, 0]
                     }
                 ]
             }
