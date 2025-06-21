@@ -94,7 +94,7 @@ When using ArUco markers for pose estimation, `tvecs` and `rvecs` provide the po
 - **`rvecs = [rx, ry, rz]` -> orientation relative to camera**  
   Describes the rotation of the marker relative to the camera using axis-angle representation 
   - The direction of the vector indicates the rotation axis.  
-  - The magnitude ‖rvec‖ is the rotation angle in radians.  
+  - The magnitude ‖rvec‖ is the rotation angle **in radians**.  
   This can be converted into a 3×3 rotation matrix using the Rodrigues formula.
 
 
