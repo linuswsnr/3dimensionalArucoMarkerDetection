@@ -101,6 +101,53 @@ def rvec_tvec_to_matrix(rvec, tvec):
     T[:3, 3] = np.array(tvec).reshape(3)
     return T
 
+def solve_all_cameras(camera_views, solved_cameras, marker_to_camera_map):
+    """
+    Berechnet rekursiv die globalen Posen aller Kameras, die Marker anderer Kameras sehen.
+
+    Args:
+        camera_views (dict): Kamera-ID → Liste von Marker-Detektionen (rvec, tvec)
+        solved_cameras (dict): Kamera-ID → globale 4x4-Transformationsmatrix
+        marker_to_camera_map (dict): Marker-ID → Kamera-ID
+
+    Returns:
+        dict: Aktualisiertes solved_cameras mit allen berechenbaren Kameras
+    """
+    unsolved_cameras = set(camera_views.keys()) - set(solved_cameras.keys())
+    progress = True
+
+    while progress and unsolved_cameras:
+        progress = False
+        for cam_id in list(unsolved_cameras):
+            detections = camera_views.get(cam_id, [])
+            for det in detections:
+                marker_id = det['detected_id']
+                other_cam_id = marker_to_camera_map.get(marker_id)
+
+                # Nur Marker verwenden, deren Kamera bereits gelöst ist
+                if other_cam_id in solved_cameras:
+                    # 1. Transformation Marker → aktuelle Kamera
+                    T_marker_to_cam = rvec_tvec_to_matrix(det['rvec'], det['tvec'])
+                    T_cam_to_marker = np.linalg.inv(T_marker_to_cam)
+
+                    # 2. Transformation Marker → global (von anderer Kamera)
+                    T_marker_to_global = solved_cameras[other_cam_id]
+
+                    # 3. Neue Kamera berechnen
+                    T_cam_to_global = T_marker_to_global @ T_cam_to_marker
+
+                    # 4. Speichern und Kamera als gelöst markieren
+                    solved_cameras[cam_id] = T_cam_to_global
+                    unsolved_cameras.remove(cam_id)
+                    progress = True
+                    print(f"Kamera {cam_id} gelöst über Marker {marker_id} (Kamera {other_cam_id})")
+                    break  # nächste Kamera prüfen
+
+    if unsolved_cameras:
+        print("Warnung: Nicht alle Kameras konnten gelöst werden:", unsolved_cameras)
+
+    return solved_cameras
+
 def visualize_camera_positions(df):
     """
     Visualisiert die Positionen und Blickrichtungen der Kameras in der XZ-Ebene.
@@ -108,7 +155,7 @@ def visualize_camera_positions(df):
     Args:
         df (pd.DataFrame): Muss Spalten enthalten: id, x, z, dir_x, dir_z
     """
-    windowsize = 1
+    windowsize = 2
     marker_text_distance = windowsize / 10
     cam_text_distance = windowsize / 15
     arrow_length = windowsize / 10
@@ -169,7 +216,6 @@ if anchor_cam_id is None:
     exit(1)
 
 # 4. Berechne globale Pose der Ankerkamera, update unsolved cameras and solved cameras
-
 Transformer_matrix_marker_to_cam = rvec_tvec_to_matrix(anchor_detection['rvec'], anchor_detection['tvec'])
 Transformer_matrix_cam_to_marker = np.linalg.inv(Transformer_matrix_marker_to_cam)
 
@@ -182,11 +228,14 @@ Transformer_matrix_global_to_cam = np.linalg.inv(Transformer_matrix_cam_to_globa
 solved_cameras = {anchor_cam_id: Transformer_matrix_global_to_cam}
 
 
+
+
 print("Transformationsmatrix Anker Kamera zu Nullpunktwürfel:")
 print(Transformer_matrix_global_to_cam)
 
 
 # 5. Iteriere über alle Kameras und berechne deren globale Posen
+solved_cameras = solve_all_cameras(camera_views, solved_cameras, params.MARKER_TO_CAMERA)
 
 
 
