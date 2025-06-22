@@ -1,11 +1,10 @@
-# Komplett korrigierter Code mit JSON-Einbindung und richtiger Interpretation
+
 
 import json
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import cv2
-import math
 import params
 
 # mehr nachkommastellen für bessere Genauigkeit
@@ -102,6 +101,14 @@ def rvec_tvec_to_matrix(rvec, tvec):
     return T
 
 def try_solve_cameras_from_solved(camera_views, solved_cameras):
+    """ 
+    Versucht, Kameras zu lösen, die bereits eine bekannte Kamera sehen.
+    Args:   
+        camera_views (dict): Mapping von Kamera-IDs zu Marker-Detektionen.
+        solved_cameras (dict): {camera_id: 4x4-Transformationsmatrix}
+    Returns:
+        dict: Aktualisierte solved_cameras mit neuen Kameras.   
+    """
     for cam_id in list(solved_cameras.keys()):
         for detection in camera_views[cam_id]:
             detection_id = detection['detected_id']
@@ -109,11 +116,12 @@ def try_solve_cameras_from_solved(camera_views, solved_cameras):
                 continue  # Marker gehört zu einer Kamera, die bereits gelöst ist
             else:
                 Transformer_matrix_marker_to_cam = rvec_tvec_to_matrix(detection['rvec'], detection['tvec']) # Marker (an neuer Kamera) aus Sicht bekannter Kamera
-
+                
+                Transformer_matrix_global_to_cam = solved_cameras[cam_id] @ Transformer_matrix_marker_to_cam @ params.ANCHOR_MARKER_WORLD_POSES[detection_id % 10]
                 # Berechne globale Transformationsmatrix zu neuer Kamera
-                Transformer_matrix_cam_from_marker = np.linalg.inv(params.ANCHOR_MARKER_WORLD_POSES[detection_id % 10])
-                Transformer_matrix_new_cam_to_cam = Transformer_matrix_marker_to_cam @ Transformer_matrix_cam_from_marker
-                Transformer_matrix_global_to_cam = solved_cameras[cam_id] @ Transformer_matrix_new_cam_to_cam
+                # Transformer_matrix_cam_from_marker = np.linalg.inv(params.ANCHOR_MARKER_WORLD_POSES[detection_id % 10])
+                # Transformer_matrix_new_cam_to_cam = Transformer_matrix_marker_to_cam @ Transformer_matrix_cam_from_marker
+                # Transformer_matrix_global_to_cam = solved_cameras[cam_id] @ Transformer_matrix_new_cam_to_cam
 
                 solved_cameras[detection_id // 10] = Transformer_matrix_global_to_cam
 
@@ -130,18 +138,18 @@ def try_solve_cameras_from_unsolved(camera_views, solved_cameras):
             else:
                 try:
                     Transformer_matrix_marker_to_cam = rvec_tvec_to_matrix(detection['rvec'], detection['tvec']) # Marker (an neuer Kamera) aus Sicht bekannter Kamera
+                    Transformer_matrix_marker_to_cam = np.linalg.inv(Transformer_matrix_marker_to_cam)
+                    Transformer_matrix_global_to_cam = solved_cameras[cam_id] @ Transformer_matrix_marker_to_cam @ params.ANCHOR_MARKER_WORLD_POSES[detection_id % 10]
 
                     # Berechne globale Transformationsmatrix zu neuer Kamera
-                    Transformer_matrix_cam_from_marker = np.linalg.inv(params.ANCHOR_MARKER_WORLD_POSES[detection_id % 10])
-                    Transformer_matrix_new_cam_to_cam = Transformer_matrix_marker_to_cam @ Transformer_matrix_cam_from_marker
-                    Transformer_matrix_global_to_cam = solved_cameras[cam_id] @ Transformer_matrix_new_cam_to_cam
+                    # Transformer_matrix_cam_from_marker = np.linalg.inv(params.ANCHOR_MARKER_WORLD_POSES[detection_id % 10])
+                    # Transformer_matrix_new_cam_to_cam = Transformer_matrix_marker_to_cam @ Transformer_matrix_cam_from_marker
+                    # Transformer_matrix_global_to_cam = solved_cameras[cam_id] @ Transformer_matrix_new_cam_to_cam
 
                     solved_cameras[detection_id // 10] = Transformer_matrix_global_to_cam
                     unsolved_cameras.remove(cam_id)
                 except:
                     pass
-                
-
     return solved_cameras
 
 def visualize_camera_positions(df):
@@ -152,8 +160,8 @@ def visualize_camera_positions(df):
         df (pd.DataFrame): Muss Spalten enthalten: id, x, z, dir_x, dir_z
     """
     windowsize = 1 # in meters for the axes
-    marker_text_distance = windowsize / 10
-    cam_text_distance = windowsize / 15
+    marker_text_distance = windowsize / 15
+    cam_text_distance = windowsize / 50
     arrow_length = windowsize / 10
     arrow_head_width = windowsize / 30
     arrow_head_length = windowsize / 20
@@ -222,13 +230,6 @@ Transformer_matrix_cam_to_global = Transformer_matrix_marker_to_global @ Transfo
 Transformer_matrix_global_to_cam = np.linalg.inv(Transformer_matrix_cam_to_global)
 
 solved_cameras = {anchor_cam_id: Transformer_matrix_global_to_cam}
-
-
-
-
-print("Transformationsmatrix Anker Kamera zu Nullpunktwürfel:")
-print(Transformer_matrix_global_to_cam)
-
 
 # 5. Iteriere über alle Kameras und berechne deren globale Posen
 for _ in range(5):  # Max 5 Iterationen
