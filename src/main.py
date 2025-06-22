@@ -8,7 +8,7 @@ import matplotlib.animation as animation
 from matplotlib.lines import Line2D
 
 from utils import setup_camera_stream, get_frame, get_marker_detections, get_camera_dict
-from process_positions import redraw_marker_camera_network
+from process_positions import process_positions
 import params as params
 import paho.mqtt.client as mqtt
 import threading
@@ -76,8 +76,11 @@ client = mqtt.Client()
 client.on_message = on_message
 client.connect(params.BROKER, params.PORT, 60)
 
+clients = [(params.TOPIC_1, 1), (params.TOPIC_2, 1), (params.TOPIC_3, 1), (params.TOPIC_4, 1), (params.TOPIC_5, 1), (params.TOPIC_6, 1)]
+clients.pop(params.CAMERA_ID-1)
+
 # Topic abonnieren
-client.subscribe([(params.TOPIC_1, 1), (params.TOPIC_2, 1), (params.TOPIC_4, 1), (params.TOPIC_6, 1)])
+client.subscribe(clients)
 client.loop_start()
 
 
@@ -90,22 +93,6 @@ cap = setup_camera_stream()
 
 markers = []
 prev_second = datetime.now().second
-
-
-legend_elements = [
-    Line2D([0], [0], marker='o', color='w', label='Kamera', markerfacecolor='green', markersize=10),
-    Line2D([0], [0], marker='s', color='w', label='ArUco Marker', markerfacecolor='blue', markersize=10)
-]
-
-plt.ion()
-fig, ax = plt.subplots(figsize=(8, 8))
-ax.set_xlim(-0.1, 0.1)
-ax.set_ylim(-0.1, 0.1)
-ax.set_xlabel("X [m]")
-ax.set_ylabel("Y [m]")
-ax.set_title("Rekonstruiertes Marker-Kamera-Netzwerk")
-ax.grid(True)
-
 
 while True:
     now = datetime.now()
@@ -140,64 +127,9 @@ while True:
         camera_dict = get_camera_dict(params.CAMERA_ID)
         client.publish(params.TOPIC_5, json.dumps(camera_dict))
 
-
-        with open('src/marker_positions_rvecs_tvecs.json', 'r') as file:
-            data = json.load(file)
-        camera_positions, marker_positions = redraw_marker_camera_network(data)
+        process_positions()
+        
         prev_second = now.second
-
-        ax.clear()
-        ax.legend(handles=legend_elements, loc='upper right')
-        ax.set_xlim(-0.1, 0.1)
-        ax.set_ylim(-0.1, 0.1)
-        ax.set_xlabel("X [m]")
-        ax.set_ylabel("Y [m]")
-        ax.set_title("Rekonstruiertes Marker-Kamera-Netzwerk")
-        ax.grid(True)
-
-        for cam_id, pos in camera_positions.items():
-            circle = plt.Circle((pos[0], pos[1]), 0.01, color='green', fill=True)
-            ax.add_patch(circle)
-            # Radius 0.05 m = 5 cm Durchmesser
-            ax.text(pos[0] + 0.001, pos[1] + 0.001, cam_id, color='green')
-
-
-
-        for marker_id, pos in marker_positions.items():
-            ax.plot(pos[0], pos[1], 'bs')
-            ax.text(pos[0] + 0.001, pos[1] + 0.001, marker_id, color='blue')
-
-        fig.suptitle("Verinfachte Annahme: 1.Kamera erkennt ihre Position 2.Kamera richtet sich dort so aus, dass 0 in pos. x-Richtung im Graphen zeigt ", fontsize=10, y=+0.001)
-        fig.canvas.draw()
-        fig.canvas.flush_events()
-
 
     if cv2.waitKey(10) & 0xFF == ord('q'):
         break
-
-    # Plotting
-    # plt.figure(figsize=(8, 8))
-    # ax = plt.gca()
-
-    # for cam_id, pos in camera_positions.items():
-    #     circle = plt.Circle((pos[0], pos[1]), 0.05, color='green', fill=True)  # Radius 0.05 m = 10 cm Durchmesser
-    #     ax.add_patch(circle)
-    #     plt.text(pos[0] + 0.05, pos[1] + 0.05, cam_id, color='green')
-
-    # for marker_id, pos in marker_positions.items():
-    #     plt.plot(pos[0], pos[1], 'bs')  # kleiner blauer Punkt
-    #     plt.text(pos[0] + 0.01, pos[1] + 0.01, marker_id, color='blue')
-        
-    # legend_elements = [
-    #     Line2D([0], [0], marker='o', color='w', label='Kamera', markerfacecolor='green', markersize=10),
-    #     Line2D([0], [0], marker='s', color='w', label='ArUco Marker', markerfacecolor='blue', markersize=10)
-    # ]
-
-    # plt.legend(handles=legend_elements, loc='upper right')
-    # plt.grid(True)
-    # plt.xlabel("x [m]")
-    # plt.ylabel("y [m]")
-    # plt.title("Rekonstruiertes Kamera-ArUco-Marker-Netzwerk")
-    # plt.suptitle("Verinfachte Annahme: 1.Kamera erkennt ihre Position 2.Kamera richtet sich dort so aus, dass 0 in pos. x-Richtung im Graphen zeigt ", fontsize=10, y=+0.001)
-    # plt.axis("equal")
-    # plt.show()

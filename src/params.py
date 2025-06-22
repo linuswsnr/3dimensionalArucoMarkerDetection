@@ -2,7 +2,7 @@ import numpy as np
 
 
 CAMERA_ID = 5
-IP_ADDRESS_CAMERA = '192.168.2.108'
+IP_ADDRESS_CAMERA = '192.168.2.124'
 URL = f'http://{IP_ADDRESS_CAMERA}:81/stream'
 
 # Kamera-Kalibrierungsparameter

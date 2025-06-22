@@ -24,9 +24,14 @@ def build_camera_pose_dataframe(solved_cameras_dict):
     for cam_id, T in solved_cameras_dict.items():
         x = T[0, 3]
         z = T[2, 3]
-        dir_x = T[0, 2]
+        dir_x = T[0, 2]*-1
         dir_z = T[2, 2]
-        angle_rad = np.arctan2(dir_z, dir_x)
+        #dir_x = T[0, 2]
+        #dir_z = T[1, 2]
+        #dir_x = T[1, 2]
+        #dir_z = T[2, 2]
+        #angle_rad = np.arctan2(dir_z, dir_x)
+        angle_rad = np.arctan2(dir_x, dir_z)
         angle_deg = np.degrees(angle_rad)
         data.append({
             'id': cam_id,
@@ -37,7 +42,17 @@ def build_camera_pose_dataframe(solved_cameras_dict):
             'angle_rad': angle_rad,
             'angle_deg': angle_deg
         })
+    print(data)
     return pd.DataFrame(data)
+
+def flip_y_axis_rotation_(Matrix):
+    """
+    Kehrt nur die Rotation um die Y-Achse einer 4x4-Transformationsmatrix um.
+    """
+    Matrix_flipped = Matrix.copy()
+    Matrix_flipped[:3, 0] *= -1  # invertiere X-Achse
+    Matrix_flipped[:3, 2] *= -1  # invertiere Z-Achse
+    return Matrix_flipped
 
 def load_valid_marker_data(path):
     with open(path, 'r') as f:
@@ -91,7 +106,9 @@ def find_anchor_camera(camera_views, camera_priority_id, anchor_ids={0, 1, 2, 3}
     return None, None
 
 def rvec_tvec_to_matrix(rvec, tvec):
-    """Erzeugt eine 4x4-Transformationsmatrix aus rvec und tvec."""
+    """
+    Erzeugt eine 4x4-Transformationsmatrix aus rvec und tvec.
+    """
     rvec = np.array(rvec, dtype=np.float64).reshape(3, 1)
     tvec = np.array(tvec, dtype=np.float64).reshape(3, 1)
     R, _ = cv2.Rodrigues(rvec)
@@ -116,12 +133,7 @@ def try_solve_cameras_from_solved(camera_views, solved_cameras):
                 continue  # Marker gehört zu einer Kamera, die bereits gelöst ist
             else:
                 Transformer_matrix_marker_to_cam = rvec_tvec_to_matrix(detection['rvec'], detection['tvec']) # Marker (an neuer Kamera) aus Sicht bekannter Kamera
-                
                 Transformer_matrix_global_to_cam = solved_cameras[cam_id] @ Transformer_matrix_marker_to_cam @ params.ANCHOR_MARKER_WORLD_POSES[detection_id % 10]
-                # Berechne globale Transformationsmatrix zu neuer Kamera
-                # Transformer_matrix_cam_from_marker = np.linalg.inv(params.ANCHOR_MARKER_WORLD_POSES[detection_id % 10])
-                # Transformer_matrix_new_cam_to_cam = Transformer_matrix_marker_to_cam @ Transformer_matrix_cam_from_marker
-                # Transformer_matrix_global_to_cam = solved_cameras[cam_id] @ Transformer_matrix_new_cam_to_cam
 
                 solved_cameras[detection_id // 10] = Transformer_matrix_global_to_cam
 
@@ -140,11 +152,6 @@ def try_solve_cameras_from_unsolved(camera_views, solved_cameras):
                     Transformer_matrix_marker_to_cam = rvec_tvec_to_matrix(detection['rvec'], detection['tvec']) # Marker (an neuer Kamera) aus Sicht bekannter Kamera
                     Transformer_matrix_marker_to_cam = np.linalg.inv(Transformer_matrix_marker_to_cam)
                     Transformer_matrix_global_to_cam = solved_cameras[cam_id] @ Transformer_matrix_marker_to_cam @ params.ANCHOR_MARKER_WORLD_POSES[detection_id % 10]
-
-                    # Berechne globale Transformationsmatrix zu neuer Kamera
-                    # Transformer_matrix_cam_from_marker = np.linalg.inv(params.ANCHOR_MARKER_WORLD_POSES[detection_id % 10])
-                    # Transformer_matrix_new_cam_to_cam = Transformer_matrix_marker_to_cam @ Transformer_matrix_cam_from_marker
-                    # Transformer_matrix_global_to_cam = solved_cameras[cam_id] @ Transformer_matrix_new_cam_to_cam
 
                     solved_cameras[detection_id // 10] = Transformer_matrix_global_to_cam
                     unsolved_cameras.remove(cam_id)
@@ -203,47 +210,79 @@ def visualize_camera_positions(df):
 # Hauptprogramm
 #--------------------------------------------------------------------------------#
 
+def process_positions():
+    """
+    Hauptfunktion zum Verarbeiten der Kamerapositionen und Marker-Detektionen.
+    wird von main.py aufgerufen.
+    Führt die folgenden Schritte aus:
+    1. Lädt die Kameradaten aus marker_positions_rvecs_tvecs
+    2. Findet die Anker-Kamera, die einen Nullpunktmarker sieht
+    3. Berechnet die globale Pose der Anker-Kamera und aktualisiert solved_cameras
+    4. Iteriert über alle Kameras und berechnet deren globale Posen
+    5. Erstellt einen DataFrame mit allen Kamerapositionen und deren Blickrichtungen
+    6. Visualisiert die Kamerapositionen und Blickrichtungen in der XZ-Ebene
+    """
+    try:
+        # 1. Lade Daten
+        camera_views = load_valid_marker_data("src/marker_positions_rvecs_tvecs.json")
+        print("\n1. Kamera-Ansichten geladen:", camera_views)
 
-# 1. Lade Daten
-camera_views = load_valid_marker_data("src/marker_positions_rvecs_tvecs.json")
-print("\n1. Kamera-Ansichten geladen:", camera_views)
+        # 2. Finde Anker-Kamera (z. B. bevorzugt Kamera 5)
+        anchor_cam_id, anchor_detection = find_anchor_camera(camera_views, params.CAMERA_ID, params.ANCHOR_MARKER_IDS)
+        if anchor_cam_id is None:
+            raise ValueError("Keine Ankerkamera erkannt.")
+            exit(1)
 
-# 2. leere Kamera-Ansichten entfernen
-# camera_views = {k: v for k, v in camera_views.items() if v}
-# print("\n2. Kamera-Ansichten nach Entfernen leerer Einträge:", camera_views)
+        # 3. Berechne globale Pose der Ankerkamera, update solved cameras
+        anchor_marker_id = anchor_detection['detected_id']
 
-# 3. Finde Anker-Kamera (z. B. bevorzugt Kamera 5)
-anchor_cam_id, anchor_detection = find_anchor_camera(camera_views, params.CAMERA_ID, params.ANCHOR_MARKER_IDS)
-print(f"\n3. Anker-Kamera gefunden: {anchor_cam_id}, Marker-Detektion: {anchor_detection}")
-if anchor_cam_id is None:
-    raise ValueError("Keine Ankerkamera erkannt.")
-    exit(1)
+        Transformer_matrix_marker_to_cam = rvec_tvec_to_matrix(anchor_detection['rvec'], anchor_detection['tvec']) # Marker (an neuer Kamera) aus Sicht bekannter Kamera
+        #Transformer_matrix_marker_to_cam = np.linalg.inv(Transformer_matrix_marker_to_cam)
+        Transformer_matrix_global_to_cam = Transformer_matrix_marker_to_cam @ params.ANCHOR_MARKER_WORLD_POSES[anchor_marker_id]
+        Transformer_matrix_global_to_cam = np.linalg.inv(Transformer_matrix_global_to_cam)
 
-# 4. Berechne globale Pose der Ankerkamera, update unsolved cameras and solved cameras
-Transformer_matrix_marker_to_cam = rvec_tvec_to_matrix(anchor_detection['rvec'], anchor_detection['tvec'])
-Transformer_matrix_cam_to_marker = np.linalg.inv(Transformer_matrix_marker_to_cam)
+        # if anchor_detection['rvec'][1] < 0 and anchor_detection['tvec'][0] < 0:
+        #     Transformer_matrix_global_to_cam[0, 3] *= -1
 
-anchor_marker_id = anchor_detection['detected_id']
+        # if anchor_detection['rvec'][1] < 0 and anchor_detection['tvec'][0] > 0:
+        #     Transformer_matrix_global_to_cam[0, 3] *= -1
 
-Transformer_matrix_marker_to_global = params.ANCHOR_MARKER_WORLD_POSES[anchor_marker_id]
-Transformer_matrix_cam_to_global = Transformer_matrix_marker_to_global @ Transformer_matrix_cam_to_marker
-Transformer_matrix_global_to_cam = np.linalg.inv(Transformer_matrix_cam_to_global)
+        # if anchor_detection['rvec'][1] > 0 and anchor_detection['tvec'][0] < 0:
+        #     Transformer_matrix_global_to_cam[0, 3] *= -1
 
-solved_cameras = {anchor_cam_id: Transformer_matrix_global_to_cam}
-
-# 5. Iteriere über alle Kameras und berechne deren globale Posen
-for _ in range(5):  # Max 5 Iterationen
-    newly = try_solve_cameras_from_solved(camera_views, solved_cameras)
-    solved_cameras.update(newly)
-    newly = try_solve_cameras_from_unsolved(camera_views, solved_cameras)
-    solved_cameras.update(newly)
+        Transformer_matrix_global_to_cam[0, 3] *= -1
+        # Transformer_matrix_global_to_cam = flip_y_axis_rotation_(Transformer_matrix_global_to_cam) 
 
 
+        # angle_rad = np.radians(-90)
+        # cos_a = np.cos(angle_rad)
+        # sin_a = np.sin(angle_rad)
+        # R_y = np.array([
+        #     [ cos_a, 0.0, sin_a, ],
+        #     [   0.0, 1.0,   0.0, ],
+        #     [-sin_a, 0.0, cos_a, ]
+        # ])
+        # Transformer_matrix_global_to_cam[:3, :3] = R_y @ Transformer_matrix_global_to_cam[:3, :3] 
 
-# 10. Dataframe erstellen mit allen Kamoerapositionen und deren Blickrichtungen
-global_camera_poses_positions = build_camera_pose_dataframe(solved_cameras)
-print("\n10. DataFrame mit Kamerapositionen und Blickrichtungen:")
-print(global_camera_poses_positions)
-print("\nSolved cameras:\n", solved_cameras)
 
-visualize_camera_positions(global_camera_poses_positions)
+        print(Transformer_matrix_global_to_cam)
+
+        solved_cameras = {anchor_cam_id: Transformer_matrix_global_to_cam}
+
+        # 4. Iteriere über alle Kameras und berechne deren globale Posen
+        for _ in range(5):  # Max 5 Iterationen
+            newly = try_solve_cameras_from_solved(camera_views, solved_cameras)
+            solved_cameras.update(newly)
+            newly = try_solve_cameras_from_unsolved(camera_views, solved_cameras)
+            solved_cameras.update(newly)
+
+        # 5. Dataframe erstellen mit allen Kamoerapositionen und deren Blickrichtungen
+        global_camera_poses_positions = build_camera_pose_dataframe(solved_cameras)
+
+        # 6. Visualisiere Kamerapositionen und Blickrichtungen
+        visualize_camera_positions(global_camera_poses_positions)
+        return
+    
+    except Exception as e:
+        print(f"Fehler beim Verarbeiten der Kamerapositionen: {e}")
+        return
