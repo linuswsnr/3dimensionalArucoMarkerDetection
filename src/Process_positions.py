@@ -49,7 +49,6 @@ def build_camera_pose_dataframe(solved_cameras_dict):
             'angle_rad': angle_rad,
             'angle_deg': angle_deg
         })
-    print(data)
     return pd.DataFrame(data)
 
 def flip_y_axis_rotation_(Matrix):
@@ -158,7 +157,7 @@ def try_solve_cameras_from_solved(camera_views, solved_cameras):
                 Transformer_matrix_marker_to_cam = rvec_tvec_to_matrix(detection['rvec'], detection['tvec']) 
                 Transformer_matrix_global_to_cam = solved_cameras[cam_id] @ Transformer_matrix_marker_to_cam @ params.ANCHOR_MARKER_WORLD_POSES[detection_id % 10]
                 Transformer_matrix_global_to_cam[0, 3] *= -1
-                
+
                 solved_cameras[detection_id // 10] = Transformer_matrix_global_to_cam
 
     return solved_cameras
@@ -192,51 +191,6 @@ def try_solve_cameras_from_unsolved(camera_views, solved_cameras):
                     pass
     return solved_cameras
 
-def visualize_camera_positions(df):
-    """
-    Visualizes the positions and viewing directions of the cameras in the XZ-plane.
-
-    Args:
-        df (pd.DataFrame): contains all global positions and poses of solved cameras. Must contain columns: id, x, z, dir_x, dir_z
-    """
-    windowsize = 0.5 # in meters for the axes
-    marker_text_distance = windowsize / 15
-    cam_text_distance = windowsize / 50
-    arrow_length = windowsize / 10
-    arrow_head_width = windowsize / 30
-    arrow_head_length = windowsize / 20
-
-    fig, ax = plt.subplots(figsize=(6, 6))
-    
-    # draw global origin 
-    cube = plt.Rectangle((-params.MARKERLENGTH / 2, -params.MARKERLENGTH / 2), params.MARKERLENGTH, params.MARKERLENGTH, color='grey', alpha=1, label='Nullpunktwürfel', zorder=4)
-    ax.add_patch(cube)
-    ax.text(marker_text_distance, 0, "M1", fontsize=9, ha='center', va='center', color='black')
-    ax.text(0, -marker_text_distance, "M2", fontsize=9, ha='center', va='center', color='black')
-    ax.text(-marker_text_distance, 0, "M3", fontsize=9, ha='center', va='center', color='black')
-    ax.text(0, marker_text_distance, "M0", fontsize=9, ha='center', va='center', color='black')
-
-    # draw camera positions and directions
-    for _, row in df.iterrows():
-        x, z = row['x'], row['z']
-        dx, dz = row['dir_x'], row['dir_z']
-        cam_id = row['id']
-
-        ax.plot(x, z, 'bo')  # camera position as blue point
-        ax.arrow(x, z, dx * arrow_length, dz * arrow_length, head_width=arrow_head_width, head_length=arrow_head_length, fc='r', ec='r', zorder=4)  # camera direction as red arrow
-        ax.text(x + cam_text_distance, z + cam_text_distance, f"Cam {int(cam_id)}", fontsize=9)
-
-    # Axis formatting
-    ax.set_xlim(-windowsize, windowsize)
-    ax.set_ylim(-windowsize, windowsize)
-    ax.set_xlabel("X")
-    ax.set_ylabel("Z")
-    ax.set_title("Global Camera Positions and Directions")
-    ax.grid(False, zorder=5)  
-    ax.set_aspect('equal')
-    plt.tight_layout()
-    plt.show()
-
 #--------------------------------------------------------------------------------#
 # Main program
 #--------------------------------------------------------------------------------#
@@ -252,8 +206,9 @@ def process_positions():
     3. Computes the global pose of the anchor camera and updates solved_cameras
     4. Iterates over all cameras and computes their global poses
     5. Creates a DataFrame with all camera positions and their viewing directions
-    6. Visualizes the camera positions and viewing directions in the XZ-plane
-    """
+
+    Returns:
+        global_camera_poses_positions (pd.DataFrame): DataFrame with columns ['id', 'x', 'z', 'dir_x', 'dir_z', 'angle_rad', 'angle_deg']."""
     try:
         # 1. load data
         camera_views = load_valid_marker_data("src/marker_positions_rvecs_tvecs.json")
@@ -286,9 +241,7 @@ def process_positions():
         # 5. build dataframe with all camera positions and their directions
         global_camera_poses_positions = build_camera_pose_dataframe(solved_cameras)
 
-        # 6. visualize camera positions and directions
-        visualize_camera_positions(global_camera_poses_positions)
-        return
+        return global_camera_poses_positions
     
     except Exception as e:
         print(f"Error processing camera positions: {e}")

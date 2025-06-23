@@ -90,6 +90,53 @@ def on_message(client, userdata, msg):
     except Exception as e:
         print(f"Error processing message: {e}")
 
+def visualize_camera_positions(df=None, ax=None, fig=None):
+    """
+    Visualizes or updates the positions and viewing directions of the cameras in the XZ-plane.
+    If ax is given, the plot is updated in the same window.
+    Args:
+        df (pd.DataFrame): DataFrame with columns ['id', 'x', 'z', 'dir_x', 'dir_z'].
+        ax (matplotlib.axes.Axes, optional): Axes to update. If None, a new figure is created.
+        fig (matplotlib.figure.Figure, optional): Figure to update. If None, a new figure is created.
+    """
+    ax.cla()  # clear previous plot content
+
+    windowsize = 0.5
+    marker_text_distance = windowsize / 15
+    cam_text_distance = windowsize / 50
+    arrow_length = windowsize / 10
+    arrow_head_width = windowsize / 30
+    arrow_head_length = windowsize / 20
+
+    # draw global origin
+    cube = plt.Rectangle((-params.MARKERLENGTH / 2, -params.MARKERLENGTH / 2), params.MARKERLENGTH, params.MARKERLENGTH, color='grey', alpha=1, zorder=4)
+    ax.add_patch(cube)
+    ax.text(marker_text_distance, 0, "M1", fontsize=9, ha='center', va='center', color='black')
+    ax.text(0, -marker_text_distance, "M2", fontsize=9, ha='center', va='center', color='black')
+    ax.text(-marker_text_distance, 0, "M3", fontsize=9, ha='center', va='center', color='black')
+    ax.text(0, marker_text_distance, "M0", fontsize=9, ha='center', va='center', color='black')
+
+    if df is not None:
+        # draw cameras
+        for _, row in df.iterrows():
+            x, z = row['x'], row['z']
+            dx, dz = row['dir_x'], row['dir_z']
+            cam_id = row['id']
+            ax.plot(x, z, 'bo')
+            ax.arrow(x, z, dx * arrow_length, dz * arrow_length, head_width=arrow_head_width, head_length=arrow_head_length, fc='r', ec='r', zorder=4)
+            ax.text(x + cam_text_distance, z + cam_text_distance, f"Cam {int(cam_id)}", fontsize=9)
+
+    ax.set_xlim(-windowsize, windowsize)
+    ax.set_ylim(-windowsize, windowsize)
+    ax.set_xlabel("X")
+    ax.set_ylabel("Z")
+    ax.set_title("Global Camera Positions and Directions")
+    ax.grid(False, zorder=5)
+    ax.set_aspect('equal')
+
+    plt.tight_layout()
+    plt.show()
+
 #--------------------------------------------------------------------------------#
 # MQTT Setup
 #--------------------------------------------------------------------------------#
@@ -116,6 +163,10 @@ cap = setup_camera_stream()
 
 markers = []
 prev_second = datetime.now().second
+
+# initialize the plot
+plt.ion()
+fig, ax = plt.subplots(figsize=(6, 6))
 
 while True:
     now = datetime.now()
@@ -152,7 +203,12 @@ while True:
         camera_dict = get_camera_dict(params.CAMERA_ID)
         client.publish(params.TOPIC_5, json.dumps(camera_dict))
 
-        process_positions()
+        global_camera_poses_positions = process_positions()
+        print("global_camera_poses_positions:\n", global_camera_poses_positions)
+
+        visualize_camera_positions(global_camera_poses_positions, ax, fig)
+        fig.canvas.draw()    
+        fig.canvas.flush_events() 
         
         prev_second = now.second
 
