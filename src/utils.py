@@ -124,8 +124,8 @@ def get_aruco_markers(frame):
     if ids is not None:
         ids = ids.flatten()
         rvecs, tvecs, _ = aruco.estimatePoseSingleMarkers(corners, params.MARKERLENGTH, params.CAMERA_MATRIX, params.DISTCOEFFS)
-        rvecs = rvecs[0].tolist() # check if there is only considered one marker
-        tvecs = tvecs[0].tolist() # check if there is only considered one marker
+        rvecs = [rvec[0].tolist() for rvec in rvecs]
+        tvecs = [tvec[0].tolist() for tvec in tvecs]        
         return ids, rvecs, tvecs
     else:	
         return [], [], []
