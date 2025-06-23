@@ -74,18 +74,21 @@ def on_message(client, userdata, msg):
     Callback function for MQTT messages.
     Updates the marker positions in the JSON file based on the received message.
     """
-    camera_id = int(str(msg.topic)[-1])
-    new_data = json.loads(msg.payload.decode())
-    with open('src/marker_positions_rvecs_tvecs.json', 'r') as file:
-        marker_positions = json.load(file)
-    for camera_dict in marker_positions:
-        if camera_dict['id'] == camera_id:
-            camera_dict['Others'] = new_data.get('Others', camera_dict['Others'])
-            camera_dict['time'] = new_data.get('time', camera_dict['time'])
-            print(f"Updated camera {camera_id} with new data.")
-            break
-    with open('src/marker_positions_rvecs_tvecs.json', 'w') as f:
-        json.dump(marker_positions, f, indent=4)  
+    try:
+        camera_id = int(str(msg.topic)[-1])
+        new_data = json.loads(msg.payload.decode())
+        with open('src/marker_positions_rvecs_tvecs.json', 'r') as file:
+            marker_positions = json.load(file)
+        for camera_dict in marker_positions:
+            if camera_dict['id'] == camera_id:
+                camera_dict['Others'] = new_data.get('Others', camera_dict['Others'])
+                camera_dict['time'] = new_data.get('time', camera_dict['time'])
+                print(f"Updated camera {camera_id} with new data.")
+                break
+        with open('src/marker_positions_rvecs_tvecs.json', 'w') as f:
+            json.dump(marker_positions, f, indent=4)  
+    except Exception as e:
+        print(f"Error processing message: {e}")
 
 #--------------------------------------------------------------------------------#
 # MQTT Setup
@@ -140,7 +143,7 @@ while True:
     # 5. remove markers that have not been updated for more than 5 seconds
     for marker in markers:
         time_diff = (now - marker.timestamp).total_seconds()
-        if time_diff > 5:
+        if time_diff > 2:
             marker.delete_position()
             markers.remove(marker)
 

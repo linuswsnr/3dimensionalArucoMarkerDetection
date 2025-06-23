@@ -10,7 +10,7 @@ This module contains parameters for camera calibration, MQTT topics, and marker 
 import numpy as np
 
 # video stream
-IP_ADDRESS_CAMERA = '192.168.2.124'
+IP_ADDRESS_CAMERA = '192.168.2.108'
 URL = f'http://{IP_ADDRESS_CAMERA}:81/stream'
 
 # camera calibration and dimensions
@@ -25,7 +25,7 @@ CAMERA_MATRIX = np.array([[fx, 0, cx],
                           [0, fy, cy],
                           [0,  0,  1]], dtype=np.float32)
 DISTCOEFFS = np.array([k1, k2, p1, p2, k3], dtype=np.float32)
-MARKERLENGTH = 0.03
+MARKERLENGTH = 0.02
 
 # MQTT
 TOPIC_1 = "EZS/beschtegruppe/1"

@@ -143,7 +143,6 @@ def rvec_tvec_to_matrix(rvec, tvec):
 def try_solve_cameras_from_solved(camera_views, solved_cameras):
     """ 
     Tries to solve cameras with known cameras.
-    
     Args:   
         camera_views (dict): Mapping of all spotted markers in addition to all camera perspectives.
         solved_cameras (dict): camera_id: global 4x4-Transformationsmatrix
@@ -158,9 +157,9 @@ def try_solve_cameras_from_solved(camera_views, solved_cameras):
             else:
                 Transformer_matrix_marker_to_cam = rvec_tvec_to_matrix(detection['rvec'], detection['tvec']) 
                 Transformer_matrix_global_to_cam = solved_cameras[cam_id] @ Transformer_matrix_marker_to_cam @ params.ANCHOR_MARKER_WORLD_POSES[detection_id % 10]
-
+                Transformer_matrix_global_to_cam[0, 3] *= -1
+                
                 solved_cameras[detection_id // 10] = Transformer_matrix_global_to_cam
-
 
     return solved_cameras
 
@@ -168,7 +167,6 @@ def try_solve_cameras_from_unsolved(camera_views, solved_cameras):
     """
     Tries to solve cameras that are not yet solved by themselves. 
     Unsolved Cameras looking for solved cameras.
-
     Args:
         camera_views (dict): Mapping of all spotted markers in addition to all camera perspectives.
         solved_cameras (dict): {camera_id: global 4x4-Transformationsmatrix}
@@ -186,6 +184,7 @@ def try_solve_cameras_from_unsolved(camera_views, solved_cameras):
                     Transformer_matrix_marker_to_cam = rvec_tvec_to_matrix(detection['rvec'], detection['tvec'])
                     Transformer_matrix_marker_to_cam = np.linalg.inv(Transformer_matrix_marker_to_cam)
                     Transformer_matrix_global_to_cam = solved_cameras[cam_id] @ Transformer_matrix_marker_to_cam @ params.ANCHOR_MARKER_WORLD_POSES[detection_id % 10]
+                    Transformer_matrix_global_to_cam[0, 3] *= -1
 
                     solved_cameras[detection_id // 10] = Transformer_matrix_global_to_cam
                     unsolved_cameras.remove(cam_id)
@@ -200,7 +199,7 @@ def visualize_camera_positions(df):
     Args:
         df (pd.DataFrame): contains all global positions and poses of solved cameras. Must contain columns: id, x, z, dir_x, dir_z
     """
-    windowsize = 1 # in meters for the axes
+    windowsize = 0.5 # in meters for the axes
     marker_text_distance = windowsize / 15
     cam_text_distance = windowsize / 50
     arrow_length = windowsize / 10
@@ -223,7 +222,6 @@ def visualize_camera_positions(df):
         dx, dz = row['dir_x'], row['dir_z']
         cam_id = row['id']
 
-        
         ax.plot(x, z, 'bo')  # camera position as blue point
         ax.arrow(x, z, dx * arrow_length, dz * arrow_length, head_width=arrow_head_width, head_length=arrow_head_length, fc='r', ec='r', zorder=4)  # camera direction as red arrow
         ax.text(x + cam_text_distance, z + cam_text_distance, f"Cam {int(cam_id)}", fontsize=9)
@@ -238,8 +236,6 @@ def visualize_camera_positions(df):
     ax.set_aspect('equal')
     plt.tight_layout()
     plt.show()
-
-
 
 #--------------------------------------------------------------------------------#
 # Main program
@@ -266,7 +262,7 @@ def process_positions():
         # 2. get anchor camera, prefered camera is params.CAMERA_ID, else the first camera that sees an anchor marker
         anchor_cam_id, anchor_detection = find_anchor_camera(camera_views, params.CAMERA_ID, params.ANCHOR_MARKER_IDS)
         if anchor_cam_id is None:
-            raise ValueError("Keine Ankerkamera erkannt.")
+            raise ValueError("origin cube not found in any camera view.")
             exit(1)
 
         # 3. process Transformation Matrix from global to camera, update solved cameras
