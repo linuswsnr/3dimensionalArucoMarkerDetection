@@ -1,3 +1,12 @@
+"""
+Authors: Linus Wasner, Lukas Bauer
+Date: 2025-06-10
+Project: 3dimensionalArucoMarkerDetection
+Lekture: Echtzeitsysteme, Masterprogram advanced driver assistance systems, University of Applied Sciences Kempten
+
+This module contains utility functions for ArUco marker detection, camera setup, and JSON handling.
+"""
+
 import json
 import cv2
 import cv2.aruco as aruco
@@ -5,10 +14,18 @@ import numpy as np
 from datetime import datetime
 import params as params
 
-
 class ArucoMarker():
     """
     Class representing an ArUco marker with its ID, distance, and angle in addition to the position of the camera which takes the image.
+
+    Attributes:
+        detected_id (int): ID of the detected marker.
+        rvecs (list): Rotation vectors of the marker.
+        tvecs (list): Translation vectors of the marker.
+        timestamp (datetime): Timestamp when the marker was detected.
+    Methods:
+        delete_position(): Deletes the marker's position from the JSON file.
+        update_position(): Updates the marker's position in the JSON file.
     """
     def __init__(self, detected_id, rvecs, tvecs, timestamp):
         self.detected_id = int(detected_id)
@@ -27,7 +44,7 @@ class ArucoMarker():
         with open ('src/marker_positions_rvecs_tvecs.json', 'r') as file:
             marker_positions = json.load(file)
 
-        # check if camera dict contains the if of the camera
+        # check if camera dict contains the ID of the camera
         found = False
         for camera_dict in marker_positions:
             if camera_dict['id'] == params.CAMERA_ID:
@@ -75,7 +92,8 @@ class ArucoMarker():
                         with open('src/marker_positions_rvecs_tvecs.json', 'w') as f:
                             json.dump(marker_positions, f, indent=4)
                         return
-                # append new detected block if detected_id not found
+                    
+                # append new detected block if detected_id does not exist
                 camera_dict['Others'].append({
                     'detected_id': self.detected_id,
                     'Position': [
@@ -91,6 +109,12 @@ def get_aruco_markers(frame):
     """
     Detects ArUco markers in the given frame.
     Returns a list of detected markers with their IDs, distances, and angles.
+    Args:
+        frame (numpy.ndarray): The image frame in which to detect markers.
+    Returns:
+        ids (list): List of detected marker IDs.
+        rvecs (list): List of lists with rotation vectors for each detected marker.
+        tvecs (list): List of lists with translation vectors for each detected marker.
     """
     aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_250)
     parameters = aruco.DetectorParameters()
@@ -109,6 +133,10 @@ def get_aruco_markers(frame):
 def get_camera_dict(camera_id):
     """
     Returns a dictionary with the camera ID and an empty list for detected markers.
+    Args:
+        camera_id (int): The ID of the camera.
+    Returns:
+        camera_dict (dict): contains the camera ID and an empty list for detected markers.
     """
     with open('src/marker_positions_rvecs_tvecs.json', 'r') as file:
         marker_positions = json.load(file)  
@@ -119,7 +147,11 @@ def get_camera_dict(camera_id):
 def get_frame(cap):
     """
     Captures a frame from the video stream.
-    Returns the captured frame.
+    Args:
+        cap (cv2.VideoCapture): The video capture object.
+    Returns:
+        frame (numpy.ndarray): The captured frame.
+        timestamp (datetime): The timestamp when the frame was captured.
     """
     ret, frame = cap.read()
     timestamp = datetime.now()
@@ -130,8 +162,12 @@ def get_frame(cap):
 
 def get_marker_detections(frame, photo_timestamp):
     """
-    Detects ArUco markers in the given frame and returns a list of ArucoMarker objects.
-    """
+    Detects ArUco markers in the given frame
+    Args:
+        frame (numpy.ndarray): The image frame in which to detect markers.
+        photo_timestamp (datetime): The timestamp when the photo was taken.
+    Returns:
+        markers (list): List of ArucoMarker objects from class ArucoMarker."""
     ids, rvecs, tvecs = get_aruco_markers(frame)
     markers = []
     for detected_id, rvec, tvec in zip(ids, rvecs, tvecs):
@@ -142,7 +178,8 @@ def get_marker_detections(frame, photo_timestamp):
 def setup_camera_stream():
     """
     Sets up the video stream from the ESP32 camera.
-    Returns a VideoCapture object.
+    Returns:
+        cap (cv2.VideoCapture): The video capture object for the camera stream.
     """
     cap = cv2.VideoCapture(params.URL)
     if not cap.isOpened():

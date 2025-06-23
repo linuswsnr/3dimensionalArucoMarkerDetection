@@ -1,3 +1,14 @@
+"""
+Authors: Linus Wasner, Lukas Bauer
+Date: 2025-06-10
+Project: 3dimensionalArucoMarkerDetection
+Lekture: Echtzeitsysteme, Masterprogram advanced driver assistance systems, University of Applied Sciences Kempten
+
+main script for the ArUco marker detection system.
+This script initializes the camera, detects ArUco markers, updates their positions, and publishes the data via MQTT.
+It also triggers the visualization of marker positions and updates the JSON file which contains marker data from all cameras.
+"""
+
 import json
 import cv2
 import cv2.aruco as aruco
@@ -54,12 +65,17 @@ default_marker_list = [
     }
 ]
 
+# Initialize the JSON file with default marker positions if it does not exist
 with open('src/marker_positions_rvecs_tvecs.json', 'w') as file:
     json.dump(default_marker_list, file, indent=4)
 
 def on_message(client, userdata, msg):
-    camera_id = int(str(msg.topic)[-1])  # ID als int
-    new_data = json.loads(msg.payload.decode())  # erwartet Dict mit 'Others' und 'time'
+    """
+    Callback function for MQTT messages.
+    Updates the marker positions in the JSON file based on the received message.
+    """
+    camera_id = int(str(msg.topic)[-1])
+    new_data = json.loads(msg.payload.decode())
     with open('src/marker_positions_rvecs_tvecs.json', 'r') as file:
         marker_positions = json.load(file)
     for camera_dict in marker_positions:
@@ -71,23 +87,27 @@ def on_message(client, userdata, msg):
     with open('src/marker_positions_rvecs_tvecs.json', 'w') as f:
         json.dump(marker_positions, f, indent=4)  
 
+#--------------------------------------------------------------------------------#
+# MQTT Setup
+#--------------------------------------------------------------------------------#
 # Client erstellen und verbinden
 client = mqtt.Client()
 client.on_message = on_message
 client.connect(params.BROKER, params.PORT, 60)
 
+# subscribe topics of all cameras except the current one
 clients = [(params.TOPIC_1, 1), (params.TOPIC_2, 1), (params.TOPIC_3, 1), (params.TOPIC_4, 1), (params.TOPIC_5, 1), (params.TOPIC_6, 1)]
 clients.pop(params.CAMERA_ID-1)
-
-# Topic abonnieren
 client.subscribe(clients)
 client.loop_start()
 
 
+### should be moved to params.py
 # Load predefined dictionary
 aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_250)
 parameters = aruco.DetectorParameters()
 detector = aruco.ArucoDetector(aruco_dict, parameters)
+
 # start the camera stream
 cap = setup_camera_stream()
 
@@ -97,14 +117,14 @@ prev_second = datetime.now().second
 while True:
     now = datetime.now()
 
-    # get the current frame from the camera
+    # 1. get the current frame from the own camera
     frame, photo_timestamp = get_frame(cap)     
     cv2.imshow("ESP32 Cam Stream", frame)
 
-    # detect markers in the current frame
+    # 2. detect markers in the current frame
     detected_markers = get_marker_detections(frame, photo_timestamp)
 
-    # update detected markers
+    # 3. update detected marker objects
     for marker in detected_markers:
         if marker.detected_id in [m.detected_id for m in markers]:
             # update existing marker
@@ -113,16 +133,18 @@ while True:
         else:
             markers.append(marker)
             marker.update_position()
-    detected_markers = []
+
+    # 4. clear list with marker objects 
+    detected_markers = [] 
     
-    # update markers
+    # 5. remove markers that have not been updated for more than 5 seconds
     for marker in markers:
         time_diff = (now - marker.timestamp).total_seconds()
         if time_diff > 5:
             marker.delete_position()
             markers.remove(marker)
 
-    # mqtt update and redraw the network every second
+    # 6. mqtt update and redraw the network every second
     if now.second != prev_second:           
         camera_dict = get_camera_dict(params.CAMERA_ID)
         client.publish(params.TOPIC_5, json.dumps(camera_dict))
@@ -131,5 +153,3 @@ while True:
         
         prev_second = now.second
 
-    if cv2.waitKey(10) & 0xFF == ord('q'):
-        break
