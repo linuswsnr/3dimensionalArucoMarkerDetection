@@ -9,6 +9,9 @@ It loads marker data, finds anchor cameras, computes global poses, and visualize
 It is called from the main.py script.
 """
 
+import matplotlib
+matplotlib.use('TkAgg')
+
 import json
 import numpy as np
 import pandas as pd
@@ -176,19 +179,19 @@ def try_solve_cameras_from_unsolved(camera_views, solved_cameras):
     for cam_id in list(unsolved_cameras):
         for detection in camera_views[cam_id]:
             detection_id = detection['detected_id']
-            if detection_id // 10 not in unsolved_cameras or detection_id % 10 == 0:
-                continue  # Marker belongs to a camera that is already solved
-            else:
+            if detection_id // 10 in solved_cameras and detection_id // 10 != 0:
                 try:
                     Transformer_matrix_marker_to_cam = rvec_tvec_to_matrix(detection['rvec'], detection['tvec'])
                     Transformer_matrix_marker_to_cam = np.linalg.inv(Transformer_matrix_marker_to_cam)
-                    Transformer_matrix_global_to_cam = solved_cameras[cam_id] @ Transformer_matrix_marker_to_cam @ params.ANCHOR_MARKER_WORLD_POSES[detection_id % 10]
+                    Transformer_matrix_global_to_cam = solved_cameras[detection_id // 10] @ Transformer_matrix_marker_to_cam @ params.ANCHOR_MARKER_WORLD_POSES[detection_id % 10]
                     Transformer_matrix_global_to_cam[0, 3] *= -1
 
                     solved_cameras[detection_id // 10] = Transformer_matrix_global_to_cam
                     unsolved_cameras.remove(cam_id)
                 except:
                     pass
+            else:
+                continue
     return solved_cameras
 
 #--------------------------------------------------------------------------------#
@@ -212,7 +215,8 @@ def process_positions():
     try:
         # 1. load data
         camera_views = load_valid_marker_data("src/marker_positions_rvecs_tvecs.json")
-        print("\n1. Kamera-Ansichten geladen:", camera_views)
+        print("camera_views:\n", camera_views)
+        # print("\n1. Kamera-Ansichten geladen:", camera_views)
 
         # 2. get anchor camera, prefered camera is params.CAMERA_ID, else the first camera that sees an anchor marker
         anchor_cam_id, anchor_detection = find_anchor_camera(camera_views, params.CAMERA_ID, params.ANCHOR_MARKER_IDS)

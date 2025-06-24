@@ -45,7 +45,7 @@ default_marker_list = [
                     "Position":[{"rvecs": []}, {"tvecs": []}]}],
         "time": ""
     },
-    {
+        {
         "id": 4,
         "Others": [{"detected_id": "",
                     "Position":[{"rvecs": []}, {"tvecs": []}]}],
@@ -53,8 +53,7 @@ default_marker_list = [
     },
     {
         "id": 5,
-        "Others": [{"detected_id": "",
-                    "Position":[{"rvecs": []}, {"tvecs": []}]}],
+        "Others": [],
         "time": ""
     },
     {
@@ -83,7 +82,6 @@ def on_message(client, userdata, msg):
             if camera_dict['id'] == camera_id:
                 camera_dict['Others'] = new_data.get('Others', camera_dict['Others'])
                 camera_dict['time'] = new_data.get('time', camera_dict['time'])
-                print(f"Updated camera {camera_id} with new data.")
                 break
         with open('src/marker_positions_rvecs_tvecs.json', 'w') as f:
             json.dump(marker_positions, f, indent=4)  
@@ -201,10 +199,11 @@ while True:
     # 6. mqtt update and redraw the network every second
     if now.second != prev_second:           
         camera_dict = get_camera_dict(params.CAMERA_ID)
-        client.publish(params.TOPIC_5, json.dumps(camera_dict))
+
+        if camera_dict["Others"]:
+            client.publish(params.TOPIC_5, json.dumps(camera_dict))
 
         global_camera_poses_positions = process_positions()
-        print("global_camera_poses_positions:\n", global_camera_poses_positions)
 
         visualize_camera_positions(global_camera_poses_positions, ax, fig)
         fig.canvas.draw()    

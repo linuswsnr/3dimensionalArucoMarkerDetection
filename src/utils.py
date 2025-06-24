@@ -33,6 +33,8 @@ class ArucoMarker():
         self.tvecs = tvecs
         self.timestamp = timestamp
 
+        self.timestamp_mqtt = self.timestamp.strftime('%Y-%m-%d %H:%M:%S')
+
     def __repr__(self):
         return f"ArucoMarker(id={self.detected_id}, rvecs={self.rvecs}, tvecs={self.tvecs}, timestamp={str(self.timestamp)})"
 
@@ -84,11 +86,12 @@ class ArucoMarker():
         # find dictionary with the camera id
         for camera_dict in marker_positions:   
             if camera_dict['id'] == params.CAMERA_ID:  
-                # find detected_id if existing and update values                            
+                # find detected_id if existing and update values 
+                                           
                 for other in camera_dict['Others']:                 
                     if other['detected_id'] == self.detected_id:
                         other['Position'] = [{'rvecs': self.rvecs}, {'tvecs': self.tvecs}]
-                        camera_dict["time"] = str(self.timestamp)
+                        camera_dict["time"] = str(self.timestamp_mqtt)
                         with open('src/marker_positions_rvecs_tvecs.json', 'w') as f:
                             json.dump(marker_positions, f, indent=4)
                         return
@@ -100,7 +103,7 @@ class ArucoMarker():
                         {'rvecs': self.rvecs}, {'tvecs': self.tvecs}
                     ]
                 })
-                camera_dict["time"] = str(self.timestamp)
+                camera_dict["time"] = str(self.timestamp_mqtt)
                 with open('src/marker_positions_rvecs_tvecs.json', 'w') as f:
                     json.dump(marker_positions, f, indent=4)
                 return
@@ -156,8 +159,13 @@ def get_frame(cap):
     ret, frame = cap.read()
     timestamp = datetime.now()
     if not ret:
-        print("Failed to grab frame")
-        return None
+        cap.release()
+        cap = cv2.VideoCapture(params.URL)
+        ret, frame = cap.read()
+        if not ret:
+            print("Failed to grab frame")
+            return None
+
     return frame, timestamp
 
 def get_marker_detections(frame, photo_timestamp):
