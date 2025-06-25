@@ -31,8 +31,8 @@ class ArucoMarker():
         self.detected_id = int(detected_id)
         self.rvecs = rvecs
         self.tvecs = tvecs
-        self.timestamp = timestamp
 
+        self.timestamp = timestamp
         self.timestamp_mqtt = self.timestamp.strftime('%Y-%m-%d %H:%M:%S')
 
     def __repr__(self):
@@ -63,11 +63,9 @@ class ArucoMarker():
                 for other in camera_dict['Others']:                 
                     if other['detected_id'] == self.detected_id:
                         camera_dict['Others'].remove(other)
-                        with open('src/marker_positions_rvecs_tvecs.json', 'w') as f:
-                            json.dump(marker_positions, f, indent=4)
                         return marker_positions
                     
-    def update_position(self, marker_positions):
+    def update_position(self, marker_positions, timestamp, rvecs=None, tvecs=None):
         """
         Updates the position of the marker in marker_positions.json.
         """
@@ -76,6 +74,12 @@ class ArucoMarker():
         #     marker_positions = json.load(file)
 
         # check if camera dict contains the if of the camera
+
+        self.rvecs = rvecs
+        self.tvecs = tvecs
+        self.timestamp = timestamp
+        self.timestamp_mqtt = self.timestamp.strftime('%Y-%m-%d %H:%M:%S')
+
         found = False
         for camera_dict in marker_positions:
             if camera_dict['id'] == params.CAMERA_ID:
@@ -134,7 +138,7 @@ def get_aruco_markers(frame):
     else:	
         return [], [], []
     
-def get_camera_dict(camera_id):
+def get_camera_dict(camera_id, marker_positions):
     """
     Returns a dictionary with the camera ID and an empty list for detected markers.
     Args:
@@ -142,11 +146,9 @@ def get_camera_dict(camera_id):
     Returns:
         camera_dict (dict): contains the camera ID and an empty list for detected markers.
     """
-    with open('src/marker_positions_rvecs_tvecs.json', 'r') as file:
-        marker_positions = json.load(file)  
-        for camera_dict in marker_positions:   
-            if camera_dict['id'] == camera_id:  
-                return camera_dict
+    for camera_dict in marker_positions:   
+        if camera_dict['id'] == camera_id:  
+            return camera_dict
 
 def get_frame(cap):
     """

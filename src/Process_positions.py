@@ -55,7 +55,7 @@ def build_camera_pose_dataframe(solved_cameras_dict):
         })
     return pd.DataFrame(data)
 
-def flip_y_axis_rotation_(Matrix):
+def flip_y_axis_rotation(Matrix):
     """
     currently not used, but can be used to flip the rotation around the Y-axis of a 4x4 transformation matrix.
 

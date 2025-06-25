@@ -72,6 +72,7 @@ def on_message(client, userdata, msg):
     """
     try:
         new_data = json.loads(msg.payload.decode())
+        print(f"Received message from {msg.topic}: {new_data}")
         new_data_camera_id = int(str(msg.topic)[-1])
         for camera_dict in marker_positions:
             if camera_dict['id'] == new_data_camera_id:
@@ -182,39 +183,69 @@ if __name__ == "__main__":
         detected_markers = get_marker_detections(frame, photo_timestamp)
 
         # 3. update detected marker objects
-        for marker in detected_markers:
-            if marker.detected_id in [m.detected_id for m in markers]:
-                # update existing marker
-                existing_marker = next(m for m in markers if m.detected_id == marker.detected_id)
-                existing_marker.update_position(marker_positions)
-            else:
-                markers.append(marker)
-                marker_positions = marker.update_position(marker_positions)
+        # for marker in detected_markers:
+        #     if marker.detected_id in [m.detected_id for m in markers]:
+        #         # update existing marker
+        #         existing_marker = next(m for m in markers if m.detected_id == marker.detected_id)
+        #         existing_marker = None
+        #         for m in markers:
+        #             if m.detected_id == marker.detected_id:
+        #                 existing_marker = m
+        #                 break
+        #         if existing_marker is not None:
+        #             marker_positions = existing_marker.update_position(marker_positions, photo_timestamp, marker.rvecs, marker.tvecs)
+        #     else:
+        #         markers.append(marker)
+        #         marker_positions = marker.update_position(marker_positions, photo_timestamp)
+
+        for new_marker in detected_markers:
+            match_found = False
+
+            for i, existing_marker in enumerate(markers):
+                if existing_marker.detected_id == new_marker.detected_id:
+                    # Marker existiert bereits → aktualisieren
+                    marker_positions = existing_marker.update_position(
+                        marker_positions,
+                        photo_timestamp,
+                        new_marker.rvecs,
+                        new_marker.tvecs
+                    )
+                    match_found = True
+                    break
+
+            if not match_found:
+                # Neuer Marker → hinzufügen (Kopie empfohlen)
+                markers.append(new_marker)
+                marker_positions = new_marker.update_position(
+                    marker_positions,
+                    photo_timestamp,
+                    new_marker.rvecs,
+                    new_marker.tvecs
+                )
 
         # 4. clear list with marker objects 
         detected_markers = [] 
         
         # 5. remove markers that have not been updated for more than 5 seconds
         for marker in markers:
-            if (now - prev_5_second).total_seconds() > 5:
+            if (now - marker.timestamp).total_seconds() > 5:
                 print(f"Removing marker {marker.detected_id} due to inactivity.")
                 marker_positions = marker.delete_position(marker_positions)
                 markers.remove(marker)
-                prev_5_second = datetime.now()
 
         # 6. mqtt update and redraw the network every second
         if (now - prev_second).total_seconds() > 1:
-            print("marker_positions\n", marker_positions)
             global_camera_poses_positions = process_positions(marker_positions)
             visualize_camera_positions(global_camera_poses_positions, ax, fig)
             fig.canvas.draw()    
             fig.canvas.flush_events() 
             prev_second = datetime.now()
-            print("1 Second")
 
         if (now - prev_5_second).total_seconds() > 5:
-            camera_dict = get_camera_dict(params.CAMERA_ID)
+            camera_dict = get_camera_dict(params.CAMERA_ID, marker_positions)
+            print(camera_dict)
             if camera_dict["Others"]:
                 client.publish(params.TOPIC_5, json.dumps(camera_dict))
+                print(f"Published data for camera {params.CAMERA_ID} to MQTT broker.: {camera_dict}")
             prev_5_second = datetime.now()
             print("5 Seconds")
