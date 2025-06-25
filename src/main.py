@@ -26,7 +26,8 @@ import threading
 
 json_lock = threading.Lock()
 
-default_marker_list = [
+
+marker_positions = [
     {
         "id": 1,
         "Others": [{"detected_id": "",
@@ -45,7 +46,7 @@ default_marker_list = [
                     "Position":[{"rvecs": []}, {"tvecs": []}]}],
         "time": ""
     },
-        {
+    {
         "id": 4,
         "Others": [{"detected_id": "",
                     "Position":[{"rvecs": []}, {"tvecs": []}]}],
@@ -64,27 +65,30 @@ default_marker_list = [
     }
 ]
 
-# Initialize the JSON file with default marker positions if it does not exist
-with open('src/marker_positions_rvecs_tvecs.json', 'w') as file:
-    json.dump(default_marker_list, file, indent=4)
-
 def on_message(client, userdata, msg):
     """
     Callback function for MQTT messages.
     Updates the marker positions in the JSON file based on the received message.
     """
     try:
-        camera_id = int(str(msg.topic)[-1])
         new_data = json.loads(msg.payload.decode())
-        with open('src/marker_positions_rvecs_tvecs.json', 'r') as file:
-            marker_positions = json.load(file)
+        new_data_camera_id = int(str(msg.topic)[-1])
         for camera_dict in marker_positions:
-            if camera_dict['id'] == camera_id:
-                camera_dict['Others'] = new_data.get('Others', camera_dict['Others'])
-                camera_dict['time'] = new_data.get('time', camera_dict['time'])
-                break
-        with open('src/marker_positions_rvecs_tvecs.json', 'w') as f:
-            json.dump(marker_positions, f, indent=4)  
+            if camera_dict['id'] == new_data_camera_id:
+                if camera_dict["time"] == "":
+                    camera_dict['Others'] = new_data.get('Others', camera_dict['Others'])
+                    camera_dict['time'] = new_data.get('time', camera_dict['time'])
+                    #print(f"add marker_positions, message from {new_data_camera_id} : {marker_positions}")
+                    break
+                old_time_stamp = camera_dict["time"]
+                old_time_stamp = datetime.now().strptime(old_time_stamp, "%Y-%m-%d %H:%M:%S")
+                new_time_stamp = new_data["time"] 
+                new_time_stamp = datetime.now().strptime(new_time_stamp, "%Y-%m-%d %H:%M:%S")
+                if old_time_stamp < new_time_stamp:
+                    camera_dict['Others'] = new_data.get('Others', camera_dict['Others'])
+                    camera_dict['time'] = new_data.get('time', camera_dict['time'])
+                    #print(f"update marker_positions, message from {new_data_camera_id} : {marker_positions}")
+                    break
     except Exception as e:
         print(f"Error processing message: {e}")
 
@@ -149,7 +153,6 @@ clients.pop(params.CAMERA_ID-1)
 client.subscribe(clients)
 client.loop_start()
 
-
 ### should be moved to params.py
 # Load predefined dictionary
 aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_250)
@@ -160,54 +163,58 @@ detector = aruco.ArucoDetector(aruco_dict, parameters)
 cap = setup_camera_stream()
 
 markers = []
-prev_second = datetime.now().second
+prev_second = datetime.now()
+prev_5_second = datetime.now()
 
 # initialize the plot
 plt.ion()
 fig, ax = plt.subplots(figsize=(6, 6))
 
-while True:
-    now = datetime.now()
+if __name__ == "__main__":
+    while True:
+        now = datetime.now()
 
-    # 1. get the current frame from the own camera
-    frame, photo_timestamp = get_frame(cap)     
-    cv2.imshow("ESP32 Cam Stream", frame)
+        # 1. get the current frame from the own camera
+        frame, photo_timestamp = get_frame(cap)     
+        cv2.imshow("ESP32 Cam Stream", frame)
 
-    # 2. detect markers in the current frame
-    detected_markers = get_marker_detections(frame, photo_timestamp)
+        # 2. detect markers in the current frame
+        detected_markers = get_marker_detections(frame, photo_timestamp)
 
-    # 3. update detected marker objects
-    for marker in detected_markers:
-        if marker.detected_id in [m.detected_id for m in markers]:
-            # update existing marker
-            existing_marker = next(m for m in markers if m.detected_id == marker.detected_id)
-            existing_marker.update_position()
-        else:
-            markers.append(marker)
-            marker.update_position()
+        # 3. update detected marker objects
+        for marker in detected_markers:
+            if marker.detected_id in [m.detected_id for m in markers]:
+                # update existing marker
+                existing_marker = next(m for m in markers if m.detected_id == marker.detected_id)
+                existing_marker.update_position(marker_positions)
+            else:
+                markers.append(marker)
+                marker_positions = marker.update_position(marker_positions)
 
-    # 4. clear list with marker objects 
-    detected_markers = [] 
-    
-    # 5. remove markers that have not been updated for more than 5 seconds
-    for marker in markers:
-        time_diff = (now - marker.timestamp).total_seconds()
-        if time_diff > 2:
-            marker.delete_position()
-            markers.remove(marker)
-
-    # 6. mqtt update and redraw the network every second
-    if now.second != prev_second:           
-        camera_dict = get_camera_dict(params.CAMERA_ID)
-
-        if camera_dict["Others"]:
-            client.publish(params.TOPIC_5, json.dumps(camera_dict))
-
-        global_camera_poses_positions = process_positions()
-
-        visualize_camera_positions(global_camera_poses_positions, ax, fig)
-        fig.canvas.draw()    
-        fig.canvas.flush_events() 
+        # 4. clear list with marker objects 
+        detected_markers = [] 
         
-        prev_second = now.second
+        # 5. remove markers that have not been updated for more than 5 seconds
+        for marker in markers:
+            if (now - prev_5_second).total_seconds() > 5:
+                print(f"Removing marker {marker.detected_id} due to inactivity.")
+                marker_positions = marker.delete_position(marker_positions)
+                markers.remove(marker)
+                prev_5_second = datetime.now()
 
+        # 6. mqtt update and redraw the network every second
+        if (now - prev_second).total_seconds() > 1:
+            print("marker_positions\n", marker_positions)
+            global_camera_poses_positions = process_positions(marker_positions)
+            visualize_camera_positions(global_camera_poses_positions, ax, fig)
+            fig.canvas.draw()    
+            fig.canvas.flush_events() 
+            prev_second = datetime.now()
+            print("1 Second")
+
+        if (now - prev_5_second).total_seconds() > 5:
+            camera_dict = get_camera_dict(params.CAMERA_ID)
+            if camera_dict["Others"]:
+                client.publish(params.TOPIC_5, json.dumps(camera_dict))
+            prev_5_second = datetime.now()
+            print("5 Seconds")

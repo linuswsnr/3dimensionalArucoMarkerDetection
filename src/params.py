@@ -10,7 +10,7 @@ This module contains parameters for camera calibration, MQTT topics, and marker 
 import numpy as np
 
 # video stream
-IP_ADDRESS_CAMERA = '192.168.137.111'
+IP_ADDRESS_CAMERA = '192.168.0.102'
 URL = f'http://{IP_ADDRESS_CAMERA}:81/stream'
 
 # camera calibration and dimensions
@@ -35,8 +35,8 @@ TOPIC_4 = "EZS/beschtegruppe/4"
 TOPIC_5 = "EZS/beschtegruppe/5"
 TOPIC_6 = "EZS/beschtegruppe/6"
 
-#BROKER = "test.mosquitto.org"
-BROKER = "broker.hivemq.com"
+BROKER = "test.mosquitto.org"
+#BROKER = "broker.hivemq.com"
 #BROKER = "192.168.3.113"
 PORT = 1883
 

@@ -18,6 +18,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import cv2
 import params
+import traceback
 
 # Set global print options for numpy arrays
 np.set_printoptions(precision=10, suppress=True)
@@ -69,7 +70,7 @@ def flip_y_axis_rotation_(Matrix):
     Matrix_flipped[:3, 2] *= -1  # invertiere Z-Achse
     return Matrix_flipped
 
-def load_valid_marker_data(path):
+def load_valid_marker_data(marker_detections):
     """
     loads marker positions and rvecs/tvecs from a JSON file.
     Filters out invalid entries.
@@ -78,11 +79,11 @@ def load_valid_marker_data(path):
     Returns:
         camera_views (dict): Mapping of all spotted markers in addition to all camera perspectives.
     """
-    with open(path, 'r') as f:
-        raw_data = json.load(f)
+    # with open(path, 'r') as f:
+    #     raw_data = json.load(f)
 
     camera_views = {}
-    for entry in raw_data:
+    for entry in marker_detections:
         cam_id = entry['id']
         valid_detections = []
         for other in entry['Others']:
@@ -198,7 +199,7 @@ def try_solve_cameras_from_unsolved(camera_views, solved_cameras):
 # Main program
 #--------------------------------------------------------------------------------#
 
-def process_positions():
+def process_positions(marker_detections):
     """
     Main function for processing camera positions and marker detections.
     Called from main.py.
@@ -213,10 +214,10 @@ def process_positions():
     Returns:
         global_camera_poses_positions (pd.DataFrame): DataFrame with columns ['id', 'x', 'z', 'dir_x', 'dir_z', 'angle_rad', 'angle_deg']."""
     try:
+        
         # 1. load data
-        camera_views = load_valid_marker_data("src/marker_positions_rvecs_tvecs.json")
-        print("camera_views:\n", camera_views)
-        # print("\n1. Kamera-Ansichten geladen:", camera_views)
+        camera_views = load_valid_marker_data(marker_detections)
+        #print("camera_views:\n", camera_views)
 
         # 2. get anchor camera, prefered camera is params.CAMERA_ID, else the first camera that sees an anchor marker
         anchor_cam_id, anchor_detection = find_anchor_camera(camera_views, params.CAMERA_ID, params.ANCHOR_MARKER_IDS)
@@ -248,5 +249,6 @@ def process_positions():
         return global_camera_poses_positions
     
     except Exception as e:
+        #traceback.print_exc()
         print(f"Error processing camera positions: {e}")
         return

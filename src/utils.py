@@ -38,13 +38,14 @@ class ArucoMarker():
     def __repr__(self):
         return f"ArucoMarker(id={self.detected_id}, rvecs={self.rvecs}, tvecs={self.tvecs}, timestamp={str(self.timestamp)})"
 
-    def delete_position(self):
+    def delete_position(self, marker_positions):
         """
         Deletes the position of the marker in marker_positions_rvecs_tvecs.json.
         """
         # Load existing marker positions from JSON file
-        with open ('src/marker_positions_rvecs_tvecs.json', 'r') as file:
-            marker_positions = json.load(file)
+        # with open ('src/marker_positions_rvecs_tvecs.json', 'r') as file:
+        #     marker_positions = json.load(file)
+        
 
         # check if camera dict contains the ID of the camera
         found = False
@@ -64,15 +65,15 @@ class ArucoMarker():
                         camera_dict['Others'].remove(other)
                         with open('src/marker_positions_rvecs_tvecs.json', 'w') as f:
                             json.dump(marker_positions, f, indent=4)
-                        return
+                        return marker_positions
                     
-    def update_position(self):
+    def update_position(self, marker_positions):
         """
         Updates the position of the marker in marker_positions.json.
         """
         # Load existing marker positions from JSON file
-        with open ('src/marker_positions_rvecs_tvecs.json', 'r') as file:
-            marker_positions = json.load(file)
+        # with open ('src/marker_positions_rvecs_tvecs.json', 'r') as file:
+        #     marker_positions = json.load(file)
 
         # check if camera dict contains the if of the camera
         found = False
@@ -92,9 +93,9 @@ class ArucoMarker():
                     if other['detected_id'] == self.detected_id:
                         other['Position'] = [{'rvecs': self.rvecs}, {'tvecs': self.tvecs}]
                         camera_dict["time"] = str(self.timestamp_mqtt)
-                        with open('src/marker_positions_rvecs_tvecs.json', 'w') as f:
-                            json.dump(marker_positions, f, indent=4)
-                        return
+                        # with open('src/marker_positions_rvecs_tvecs.json', 'w') as f:
+                        #     json.dump(marker_positions, f, indent=4)
+                        return marker_positions
                     
                 # append new detected block if detected_id does not exist
                 camera_dict['Others'].append({
@@ -104,9 +105,9 @@ class ArucoMarker():
                     ]
                 })
                 camera_dict["time"] = str(self.timestamp_mqtt)
-                with open('src/marker_positions_rvecs_tvecs.json', 'w') as f:
-                    json.dump(marker_positions, f, indent=4)
-                return
+                # with open('src/marker_positions_rvecs_tvecs.json', 'w') as f:
+                #     json.dump(marker_positions, f, indent=4)
+                return marker_positions
 
 def get_aruco_markers(frame):
     """
