@@ -124,9 +124,7 @@ def get_aruco_markers(frame):
         rvecs (list): List of lists with rotation vectors for each detected marker.
         tvecs (list): List of lists with translation vectors for each detected marker.
     """
-    aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_250)
-    parameters = aruco.DetectorParameters()
-    detector = aruco.ArucoDetector(aruco_dict, parameters)
+    detector = aruco.ArucoDetector(params.aruco_dict, params.parameters)
     corners, ids, _ = detector.detectMarkers(frame)
     
     if ids is not None:

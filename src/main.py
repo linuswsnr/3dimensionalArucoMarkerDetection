@@ -154,12 +154,6 @@ clients.pop(params.CAMERA_ID-1)
 client.subscribe(clients)
 client.loop_start()
 
-### should be moved to params.py
-# Load predefined dictionary
-aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_250)
-parameters = aruco.DetectorParameters()
-detector = aruco.ArucoDetector(aruco_dict, parameters)
-
 # start the camera stream
 cap = setup_camera_stream()
 
@@ -183,27 +177,11 @@ if __name__ == "__main__":
         detected_markers = get_marker_detections(frame, photo_timestamp)
 
         # 3. update detected marker objects
-        # for marker in detected_markers:
-        #     if marker.detected_id in [m.detected_id for m in markers]:
-        #         # update existing marker
-        #         existing_marker = next(m for m in markers if m.detected_id == marker.detected_id)
-        #         existing_marker = None
-        #         for m in markers:
-        #             if m.detected_id == marker.detected_id:
-        #                 existing_marker = m
-        #                 break
-        #         if existing_marker is not None:
-        #             marker_positions = existing_marker.update_position(marker_positions, photo_timestamp, marker.rvecs, marker.tvecs)
-        #     else:
-        #         markers.append(marker)
-        #         marker_positions = marker.update_position(marker_positions, photo_timestamp)
-
         for new_marker in detected_markers:
             match_found = False
 
             for i, existing_marker in enumerate(markers):
                 if existing_marker.detected_id == new_marker.detected_id:
-                    # Marker existiert bereits → aktualisieren
                     marker_positions = existing_marker.update_position(
                         marker_positions,
                         photo_timestamp,
@@ -214,7 +192,6 @@ if __name__ == "__main__":
                     break
 
             if not match_found:
-                # Neuer Marker → hinzufügen (Kopie empfohlen)
                 markers.append(new_marker)
                 marker_positions = new_marker.update_position(
                     marker_positions,
@@ -222,18 +199,16 @@ if __name__ == "__main__":
                     new_marker.rvecs,
                     new_marker.tvecs
                 )
-
-        # 4. clear list with marker objects 
         detected_markers = [] 
         
-        # 5. remove markers that have not been updated for more than 5 seconds
+        # 4. remove markers that have not been updated for more than 5 seconds
         for marker in markers:
             if (now - marker.timestamp).total_seconds() > 5:
                 print(f"Removing marker {marker.detected_id} due to inactivity.")
                 marker_positions = marker.delete_position(marker_positions)
                 markers.remove(marker)
 
-        # 6. mqtt update and redraw the network every second
+        # 5. redraw the network every second
         if (now - prev_second).total_seconds() > 1:
             global_camera_poses_positions = process_positions(marker_positions)
             visualize_camera_positions(global_camera_poses_positions, ax, fig)
@@ -241,6 +216,7 @@ if __name__ == "__main__":
             fig.canvas.flush_events() 
             prev_second = datetime.now()
 
+        # 6. publish camera data every 5 seconds
         if (now - prev_5_second).total_seconds() > 5:
             camera_dict = get_camera_dict(params.CAMERA_ID, marker_positions)
             print(camera_dict)

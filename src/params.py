@@ -8,6 +8,7 @@ This module contains parameters for camera calibration, MQTT topics, and marker 
 """
 
 import numpy as np
+import cv2.aruco as aruco
 
 # video stream
 IP_ADDRESS_CAMERA = '192.168.0.102'
@@ -27,6 +28,9 @@ CAMERA_MATRIX = np.array([[fx, 0, cx],
                           [0,  0,  1]], dtype=np.float32)
 DISTCOEFFS = np.array([k1, k2, p1, p2, k3], dtype=np.float32)
 MARKERLENGTH = 0.02
+
+aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_250)
+parameters = aruco.DetectorParameters()
 
 # MQTT
 TOPIC_1 = "EZS/beschtegruppe/1"

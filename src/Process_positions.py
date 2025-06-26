@@ -79,9 +79,6 @@ def load_valid_marker_data(marker_detections):
     Returns:
         camera_views (dict): Mapping of all spotted markers in addition to all camera perspectives.
     """
-    # with open(path, 'r') as f:
-    #     raw_data = json.load(f)
-
     camera_views = {}
     for entry in marker_detections:
         cam_id = entry['id']
@@ -161,9 +158,8 @@ def try_solve_cameras_from_solved(camera_views, solved_cameras):
                 Transformer_matrix_marker_to_cam = rvec_tvec_to_matrix(detection['rvec'], detection['tvec']) 
                 Transformer_matrix_global_to_cam = solved_cameras[cam_id] @ Transformer_matrix_marker_to_cam @ params.ANCHOR_MARKER_WORLD_POSES[detection_id % 10]
                 Transformer_matrix_global_to_cam[0, 3] *= -1
-
+                
                 solved_cameras[detection_id // 10] = Transformer_matrix_global_to_cam
-
     return solved_cameras
 
 def try_solve_cameras_from_unsolved(camera_views, solved_cameras):
