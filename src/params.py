@@ -11,7 +11,7 @@ import numpy as np
 import cv2.aruco as aruco
 
 # video stream
-IP_ADDRESS_CAMERA = '192.168.0.102'
+IP_ADDRESS_CAMERA = '192.168.3.121'
 URL = f'http://{IP_ADDRESS_CAMERA}:81/stream'
 
 # camera calibration and dimensions
@@ -32,6 +32,9 @@ MARKERLENGTH = 0.02
 aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_250)
 parameters = aruco.DetectorParameters()
 
+# visualisation
+WINDOWSIZE = 0.5
+
 # MQTT
 TOPIC_1 = "EZS/beschtegruppe/1"
 TOPIC_2 = "EZS/beschtegruppe/2"
@@ -40,9 +43,9 @@ TOPIC_4 = "EZS/beschtegruppe/4"
 TOPIC_5 = "EZS/beschtegruppe/5"
 TOPIC_6 = "EZS/beschtegruppe/6"
 
-BROKER = "test.mosquitto.org"
+#BROKER = "test.mosquitto.org"
 #BROKER = "broker.hivemq.com"
-#BROKER = "192.168.3.113"
+BROKER = "192.168.3.113"
 PORT = 1883
 
 # Marker IDs to map cameras

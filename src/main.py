@@ -104,12 +104,11 @@ def visualize_camera_positions(df=None, ax=None, fig=None):
     """
     ax.cla()  # clear previous plot content
 
-    windowsize = 0.5
-    marker_text_distance = windowsize / 15
-    cam_text_distance = windowsize / 50
-    arrow_length = windowsize / 10
-    arrow_head_width = windowsize / 30
-    arrow_head_length = windowsize / 20
+    marker_text_distance = params.WINDOWSIZE / 15
+    cam_text_distance = params.WINDOWSIZE / 50
+    arrow_length = params.WINDOWSIZE / 10
+    arrow_head_width = params.WINDOWSIZE / 30
+    arrow_head_length = params.WINDOWSIZE / 20
 
     # draw global origin
     cube = plt.Rectangle((-params.MARKERLENGTH / 2, -params.MARKERLENGTH / 2), params.MARKERLENGTH, params.MARKERLENGTH, color='grey', alpha=1, zorder=4)
@@ -129,8 +128,8 @@ def visualize_camera_positions(df=None, ax=None, fig=None):
             ax.arrow(x, z, dx * arrow_length, dz * arrow_length, head_width=arrow_head_width, head_length=arrow_head_length, fc='r', ec='r', zorder=4)
             ax.text(x + cam_text_distance, z + cam_text_distance, f"Cam {int(cam_id)}", fontsize=9)
 
-    ax.set_xlim(-windowsize, windowsize)
-    ax.set_ylim(-windowsize, windowsize)
+    ax.set_xlim(-params.WINDOWSIZE, params.WINDOWSIZE)
+    ax.set_ylim(-params.WINDOWSIZE, params.WINDOWSIZE)
     ax.set_xlabel("X")
     ax.set_ylabel("Z")
     ax.set_title("Global Camera Positions and Directions")
