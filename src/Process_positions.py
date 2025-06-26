@@ -1,175 +1,250 @@
+"""
+Authors: Linus Wasner, Lukas Bauer
+Date: 2025-06-20
+Project: 3dimensionalArucoMarkerDetection
+Lekture: Echtzeitsysteme, Masterprogram advanced driver assistance systems, University of Applied Sciences Kempten
+
+This module processes camera positions and marker detections.
+It loads marker data, finds anchor cameras, computes global poses, and visualizes camera positions and directions.
+It is called from the main.py script.
+"""
+
+import matplotlib
+matplotlib.use('TkAgg')
+
+import json
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import cv2
-from collections import defaultdict, deque  # <- deque hier hinzufügen
-from matplotlib.lines import Line2D
+import params
+import traceback
 
+# Set global print options for numpy arrays
+np.set_printoptions(precision=10, suppress=True)
 
+def build_camera_pose_dataframe(solved_cameras_dict):
+    """
+    Creates a DataFrame with the global position and orientation of each solved cameras.
+    Args:
+        solved_cameras (dict): camera_id: global 4x4-Transformationsmatrix
+    Returns:
+        data (pd.DataFrame): DataFrame with columns ['id', 'x', 'z', 'dir_x', 'dir_z', 'angle_rad', 'angle_deg']
+    """
+    data = []
+    for cam_id, T in solved_cameras_dict.items():
+        x = T[0, 3]
+        z = T[2, 3]
+        dir_x = T[0, 2]*-1
+        dir_z = T[2, 2]
+        #dir_x = T[0, 2]
+        #dir_z = T[1, 2]
+        #dir_x = T[1, 2]
+        #dir_z = T[2, 2]
+        #angle_rad = np.arctan2(dir_z, dir_x)
+        angle_rad = np.arctan2(dir_x, dir_z)
+        angle_deg = np.degrees(angle_rad)
+        data.append({
+            'id': cam_id,
+            'x': x,
+            'z': z,
+            'dir_x': dir_x,
+            'dir_z': dir_z,
+            'angle_rad': angle_rad,
+            'angle_deg': angle_deg
+        })
+    return pd.DataFrame(data)
 
-def redraw_marker_camera_network(data):
+def flip_y_axis_rotation(Matrix):
+    """
+    currently not used, but can be used to flip the rotation around the Y-axis of a 4x4 transformation matrix.
 
-    # Zuordnung: Welche Marker gehören zu welcher Kamera
-    marker_to_camera = {
-        10: 1, 11: 1, 12: 1, 13: 1,
-        20: 2, 21: 2, 22: 2, 23: 2,
-        30: 3, 31: 3, 32: 3, 33: 3,
-        40: 4, 41: 4, 42: 4, 43: 4,
-        50: 5, 51: 5, 52: 5, 53: 5,
-        60: 6, 61: 6, 62: 6, 63: 6
-    }
+    Flips the rotation around the Y-axis of a 4x4 transformation matrix.
+    Args:
+        Matrix (np.ndarray): 4x4 transformation matrix.
+    Returns:
+        Matrix_flipped (np.ndarray): Flipped 4x4 transformation matrix.
+    """
+    Matrix_flipped = Matrix.copy()
+    Matrix_flipped[:3, 0] *= -1  # invertiere X-Achse
+    Matrix_flipped[:3, 2] *= -1  # invertiere Z-Achse
+    return Matrix_flipped
 
-    def get_camera_position_from_marker(rvec, tvec, marker_global_pos, detected_marker_id):
-        tvec = np.array(tvec, dtype=np.float64).reshape((3, 1)) / 100.0
+def load_valid_marker_data(marker_detections):
+    """
+    loads marker positions and rvecs/tvecs from a JSON file.
+    Filters out invalid entries.
+    Args:
+        path (str): Path to the JSON file containing marker positions and rvecs/tvecs.
+    Returns:
+        camera_views (dict): Mapping of all spotted markers in addition to all camera perspectives.
+    """
+    camera_views = {}
+    for entry in marker_detections:
+        cam_id = entry['id']
+        valid_detections = []
+        for other in entry['Others']:
+            try:
+                detected_id = int(other['detected_id'])
+                rvec = other['Position'][0]['rvecs']
+                tvec = other['Position'][1]['tvecs']
+                if len(rvec) == 3 and len(tvec) == 3:
+                    valid_detections.append({
+                        'detected_id': detected_id,
+                        'rvec': rvec,
+                        'tvec': tvec
+                    })
+            except (ValueError, KeyError, IndexError, TypeError):
+                continue
+        camera_views[cam_id] = valid_detections
+    return camera_views
 
-        # Ausrichtung der Marker ID verwenden → Blickrichtung ableiten
-        # Angenommen: Kamera "sieht" Marker mit ID → daraus folgt: Kamera zeigt in Richtung des Markers
-        direction_type = detected_marker_id % 10  # z.B. Marker 13 → 3 (negativ Y)
-        rotation_map = {
-            0: 90.0,  # Kamera schaut gegen +X → also -X
-            1: 180.0,  # Kamera schaut gegen +Y → also -Y
-            2: -90.0,    # Marker schaut -X → Kamera schaut +X
-            3: 0.0    # Marker schaut -Y → Kamera schaut +Y
-        }
+def find_anchor_camera(camera_views, camera_priority_id, anchor_ids={0, 1, 2, 3}): # test with params.ANCHOR_MARKER_IDS
+    """
+    Finds the anchor camera that sees a global origin marker.
+    Prefers the camera with camera_priority_id if it sees an anchor.
+    Args:
+        camera_views (dict): Mapping of camera IDs to marker detections.
+        camera_priority_id (int): Preferred camera ID.
+        anchor_ids (set): Set of marker IDs of the global origin cube.
+    Returns:
+        tuple (camera_id (int), detection (dict)): ID of the anchor camera and its detection entry stored in marker_positions_rvecs_tvecs.json.
+    """
+    # 1. Check if the prioritized camera sees an anchor marker
+    detections = camera_views.get(camera_priority_id, [])
+    for det in detections:
+        if det['detected_id'] in anchor_ids:
+            return camera_priority_id, det
+    # 2. If not, iterate over all cameras and find the first one that sees an anchor marker
+    for cam_id, detections in camera_views.items():
+        for det in detections:
+            if det['detected_id'] in anchor_ids:
+                return cam_id, det
+    # 3. No anchor found
+    return None, None
 
-        angle_deg = rotation_map.get(direction_type, 0.0)
-        angle_rad = np.deg2rad(angle_deg)
+def rvec_tvec_to_matrix(rvec, tvec):
+    """
+    Builds a 4x4 transformation matrix from rotation vector (rvec) and translation vector (tvec).
+    Args:
+        rvec (list or np.ndarray): Rotation vector (3 elements).
+        tvec (list or np.ndarray): Translation vector (3 elements).
+    Returns:
+        np.ndarray: 4x4 transformation matrix.
+    """
+    rvec = np.array(rvec, dtype=np.float64).reshape(3, 1)
+    tvec = np.array(tvec, dtype=np.float64).reshape(3, 1)
+    R, _ = cv2.Rodrigues(rvec)
+    T = np.eye(4)
+    T[:3, :3] = R
+    T[:3, 3] = np.array(tvec).reshape(3)
+    return T
 
-        # Erzeuge einfache Rotationsmatrix in Z-Achse
-        cos_a, sin_a = np.cos(angle_rad), np.sin(angle_rad)
-        R = np.array([
-            [cos_a, -sin_a, 0],
-            [sin_a,  cos_a, 0],
-            [0,      0,     1]
-        ])
+def try_solve_cameras_from_solved(camera_views, solved_cameras):
+    """ 
+    Tries to solve cameras with known cameras.
+    Args:   
+        camera_views (dict): Mapping of all spotted markers in addition to all camera perspectives.
+        solved_cameras (dict): camera_id: global 4x4-Transformationsmatrix
+    Returns:
+        solved_cameras (dict): Updated solved_cameras with new cameras.
+    """
+    for cam_id in list(solved_cameras.keys()):
+        for detection in camera_views[cam_id]:
+            detection_id = detection['detected_id']
+            if detection_id // 10 in set(solved_cameras.keys()) or detection_id // 10 == 0:
+                continue  # Marker belongs to a camera that is already solved
+            else:
+                Transformer_matrix_marker_to_cam = rvec_tvec_to_matrix(detection['rvec'], detection['tvec']) 
+                Transformer_matrix_global_to_cam = solved_cameras[cam_id] @ Transformer_matrix_marker_to_cam @ params.ANCHOR_MARKER_WORLD_POSES[detection_id % 10]
+                Transformer_matrix_global_to_cam[0, 3] *= -1
+                
+                solved_cameras[detection_id // 10] = Transformer_matrix_global_to_cam
+    return solved_cameras
 
-        cam_pos = marker_global_pos.reshape((3, 1)) - R @ tvec
-        return cam_pos
-
-
-    # Initialisiere bekannte Positionen
-    camera_positions = {}  # id -> np.array([x, y, z])
-    marker_positions = {}  # id -> np.array([x, y, z])
-    edges = defaultdict(list)
-
-    # Verknüpfungen zwischen Kamera und Marker
-    for entry in data:
-        cam_id = entry["id"]
-        for other in entry["Others"]:
-            rvecs = other["Position"][0]["rvecs"]
-            tvecs = other["Position"][1]["tvecs"]
-            detected_id = other["detected_id"]
-            if rvecs and tvecs and detected_id != "":
+def try_solve_cameras_from_unsolved(camera_views, solved_cameras):
+    """
+    Tries to solve cameras that are not yet solved by themselves. 
+    Unsolved Cameras looking for solved cameras.
+    Args:
+        camera_views (dict): Mapping of all spotted markers in addition to all camera perspectives.
+        solved_cameras (dict): {camera_id: global 4x4-Transformationsmatrix}
+    Returns:
+        solved_cameras (dict): Updated solved_cameras with new cameras.
+    """
+    unsolved_cameras = set(camera_views.keys()) - set(solved_cameras.keys())
+    for cam_id in list(unsolved_cameras):
+        for detection in camera_views[cam_id]:
+            detection_id = detection['detected_id']
+            if detection_id // 10 in solved_cameras and detection_id // 10 != 0:
                 try:
-                    rvecs_np = np.array(rvecs, dtype=np.float64)
-                    tvecs_np = np.array(tvecs, dtype=np.float64)
-                    edges[f"C{cam_id}"].append((f"M{detected_id}", rvecs_np, tvecs_np))
-                    edges[f"M{detected_id}"].append((f"C{cam_id}", rvecs_np, tvecs_np))
+                    Transformer_matrix_marker_to_cam = rvec_tvec_to_matrix(detection['rvec'], detection['tvec'])
+                    Transformer_matrix_marker_to_cam = np.linalg.inv(Transformer_matrix_marker_to_cam)
+                    Transformer_matrix_global_to_cam = solved_cameras[detection_id // 10] @ Transformer_matrix_marker_to_cam @ params.ANCHOR_MARKER_WORLD_POSES[detection_id % 10]
+                    Transformer_matrix_global_to_cam[0, 3] *= -1
+
+                    solved_cameras[detection_id // 10] = Transformer_matrix_global_to_cam
+                    unsolved_cameras.remove(cam_id)
                 except:
-                    continue
+                    pass
+            else:
+                continue
+    return solved_cameras
 
-    # Nullpunkt-Würfel aus beliebigem Marker 0, 1, 2 oder 3 ableiten
-    initial_marker_ids = {"0": np.array([0.015, 0.0, 0.0]),   # M0 in +X
-                        "1": np.array([0.0, 0.015, 0.0]),   # M1 in +Y
-                        "2": np.array([-0.015, 0.0, 0.0]),  # M2 in -X
-                        "3": np.array([0.0, -0.015, 0.0])}  # M3 in -Y
+#--------------------------------------------------------------------------------#
+# Main program
+#--------------------------------------------------------------------------------#
 
-    for entry in data:
-        for other in entry["Others"]:
-            marker_id = str(other["detected_id"])
-            if marker_id in initial_marker_ids and marker_id not in marker_positions:
-                rvecs = other["Position"][0]["rvecs"]
-                tvecs = other["Position"][1]["tvecs"]
-                if rvecs and tvecs:
-                    tvec = np.array(tvecs, dtype=np.float64).reshape((3,1)) / 100.0
-                    offset = initial_marker_ids[marker_id].reshape((3,1))
-                    marker_global = np.zeros((3,1)) + offset - tvec  # Kamera bei Ursprung
-                    marker_positions[f"M{marker_id}"] = marker_global.flatten()
+def process_positions(marker_detections):
+    """
+    Main function for processing camera positions and marker detections.
+    Called from main.py.
 
-    # Ergänze die restlichen Marker (M0–M3), wenn einer bekannt ist
-    for id_str, offset in initial_marker_ids.items():
-        label = f"M{id_str}"
-        if label in marker_positions:
-            origin = marker_positions[label] - offset  # Ursprung errechnen
-            for other_id, delta in initial_marker_ids.items():
-                other_label = f"M{other_id}"
-                if other_label not in marker_positions:
-                    marker_positions[other_label] = origin + delta
-            break  # Sobald ein Ursprung gefunden ist, reicht das
-    queue = deque(marker_positions.keys())
+    Performs the following steps:
+    1. Loads camera data from marker_positions_rvecs_tvecs
+    2. Finds the anchor camera that sees a zero-point marker
+    3. Computes the global pose of the anchor camera and updates solved_cameras
+    4. Iterates over all cameras and computes their global poses
+    5. Creates a DataFrame with all camera positions and their viewing directions
 
+    Returns:
+        global_camera_poses_positions (pd.DataFrame): DataFrame with columns ['id', 'x', 'z', 'dir_x', 'dir_z', 'angle_rad', 'angle_deg']."""
+    try:
+        
+        # 1. load data
+        camera_views = load_valid_marker_data(marker_detections)
+        #print("camera_views:\n", camera_views)
 
-    # Rekursive Bestimmung
-    while queue:
-        current = queue.popleft()
+        # 2. get anchor camera, prefered camera is params.CAMERA_ID, else the first camera that sees an anchor marker
+        anchor_cam_id, anchor_detection = find_anchor_camera(camera_views, params.CAMERA_ID, params.ANCHOR_MARKER_IDS)
+        if anchor_cam_id is None:
+            raise ValueError("origin cube not found in any camera view.")
+            exit(1)
 
-        if current.startswith("M"):
-            marker_id = current
-            for neighbor, rvecs, tvecs in edges[marker_id]:
-                if neighbor not in camera_positions:
-                    marker_num = int(marker_id[1:])
-                    cam_pos = get_camera_position_from_marker(rvecs, tvecs, marker_positions[marker_id], marker_num)
-                    camera_positions[neighbor] = cam_pos
-                    queue.append(neighbor)
+        # 3. process Transformation Matrix from global to camera, update solved cameras
+        anchor_marker_id = anchor_detection['detected_id']
 
-                    # Richtungsbasierte Markerplatzierung für Kamera
-                    try:
-                        cam_num = int(neighbor[1:])  # "C2" → 2
-                        for marker_id_local, marker_cam in marker_to_camera.items():
-                            if marker_cam == cam_num:
-                                marker_label = f"M{marker_id_local}"
-                                if marker_label not in marker_positions:
-                                    # Offset nach Marker-Typ definieren
-                                    marker_type = marker_id_local % 10
-                                    relative_offsets = {
-                                        0: np.array([0.015, 0.0, 0.0]),   # +X
-                                        1: np.array([0.0, 0.015, 0.0]),   # +Y
-                                        2: np.array([-0.015, 0.0, 0.0]),  # -X
-                                        3: np.array([0.0, -0.015, 0.0])   # -Y
-                                    }
-                                    offset = relative_offsets.get(marker_type, np.zeros(3))
-                                    marker_positions[marker_label] = cam_pos.flatten() + offset
-                                    queue.append(marker_label)
-                    except:
-                        pass
+        Transformer_matrix_marker_to_cam = rvec_tvec_to_matrix(anchor_detection['rvec'], anchor_detection['tvec']) # Marker (an neuer Kamera) aus Sicht bekannter Kamera
+        Transformer_matrix_global_to_cam = Transformer_matrix_marker_to_cam @ params.ANCHOR_MARKER_WORLD_POSES[anchor_marker_id]
+        Transformer_matrix_global_to_cam = np.linalg.inv(Transformer_matrix_global_to_cam)
 
-        elif current.startswith("C"):
-            cam_id = current
-            for neighbor, rvecs, tvecs in edges[cam_id]:
-                if neighbor not in marker_positions:
-                    cam_pos = camera_positions[cam_id]
-                    rvec = np.array(rvecs, dtype=np.float64)
-                    tvec = np.array(tvecs, dtype=np.float64).reshape((3, 1)) / 100.0
-                    R, _ = cv2.Rodrigues(rvec)
-                    marker_pos = cam_pos.reshape((3, 1)) + R @ tvec
-                    marker_positions[neighbor] = marker_pos.flatten()
-                    queue.append(neighbor)
+        Transformer_matrix_global_to_cam[0, 3] *= -1
 
-    return camera_positions, marker_positions
+        solved_cameras = {anchor_cam_id: Transformer_matrix_global_to_cam}
 
-# Plotting
-# plt.figure(figsize=(8, 8))
-# ax = plt.gca()
+        # 4. iterate over all cameras and try to solve them
+        for _ in range(6):
+            newly = try_solve_cameras_from_solved(camera_views, solved_cameras)
+            solved_cameras.update(newly)
+            newly = try_solve_cameras_from_unsolved(camera_views, solved_cameras)
+            solved_cameras.update(newly)
 
-# for cam_id, pos in camera_positions.items():
-#     circle = plt.Circle((pos[0], pos[1]), 0.05, color='green', fill=True)  # Radius 0.05 m = 10 cm Durchmesser
-#     ax.add_patch(circle)
-#     plt.text(pos[0] + 0.05, pos[1] + 0.05, cam_id, color='green')
+        # 5. build dataframe with all camera positions and their directions
+        global_camera_poses_positions = build_camera_pose_dataframe(solved_cameras)
 
-# for marker_id, pos in marker_positions.items():
-#     plt.plot(pos[0], pos[1], 'bs')  # kleiner blauer Punkt
-#     plt.text(pos[0] + 0.01, pos[1] + 0.01, marker_id, color='blue')
+        return global_camera_poses_positions
     
-# legend_elements = [
-#     Line2D([0], [0], marker='o', color='w', label='Kamera', markerfacecolor='green', markersize=10),
-#     Line2D([0], [0], marker='s', color='w', label='ArUco Marker', markerfacecolor='blue', markersize=10)
-# ]
-# plt.legend(handles=legend_elements, loc='upper right')
-# plt.grid(True)
-# plt.xlabel("x [m]")
-# plt.ylabel("y [m]")
-# plt.title("Rekonstruiertes Kamera-ArUco-Marker-Netzwerk")
-# plt.suptitle("Verinfachte Annahme: 1.Kamera erkennt ihre Position 2.Kamera richtet sich dort so aus, dass 0 in pos. x-Richtung im Graphen zeigt ", fontsize=10, y=+0.001)
-# plt.axis("equal")
-# plt.show()
-
-
+    except Exception as e:
+        #traceback.print_exc()
+        print(f"Error processing camera positions: {e}")
+        return

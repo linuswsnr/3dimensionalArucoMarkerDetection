@@ -1,3 +1,14 @@
+"""
+Authors: Linus Wasner, Lukas Bauer
+Date: 2025-06-10
+Project: 3dimensionalArucoMarkerDetection
+Lekture: Echtzeitsysteme, Masterprogram advanced driver assistance systems, University of Applied Sciences Kempten
+
+main script for the ArUco marker detection system.
+This script initializes the camera, detects ArUco markers, updates their positions, and publishes the data via MQTT.
+It also triggers the visualization of marker positions and updates the JSON file which contains marker data from all cameras.
+"""
+
 import json
 import cv2
 import cv2.aruco as aruco
@@ -8,14 +19,15 @@ import matplotlib.animation as animation
 from matplotlib.lines import Line2D
 
 from utils import setup_camera_stream, get_frame, get_marker_detections, get_camera_dict
-from process_positions import redraw_marker_camera_network
+from process_positions import process_positions
 import params as params
 import paho.mqtt.client as mqtt
 import threading
 
 json_lock = threading.Lock()
 
-default_marker_list = [
+
+marker_positions = [
     {
         "id": 1,
         "Others": [{"detected_id": "",
@@ -42,8 +54,7 @@ default_marker_list = [
     },
     {
         "id": 5,
-        "Others": [{"detected_id": "",
-                    "Position":[{"rvecs": []}, {"tvecs": []}]}],
+        "Others": [],
         "time": ""
     },
     {
@@ -54,150 +65,162 @@ default_marker_list = [
     }
 ]
 
-with open('src/marker_positions_rvecs_tvecs.json', 'w') as file:
-    json.dump(default_marker_list, file, indent=4)
-
 def on_message(client, userdata, msg):
-    camera_id = int(str(msg.topic)[-1])  # ID als int
-    new_data = json.loads(msg.payload.decode())  # erwartet Dict mit 'Others' und 'time'
-    with open('src/marker_positions_rvecs_tvecs.json', 'r') as file:
-        marker_positions = json.load(file)
-    for camera_dict in marker_positions:
-        if camera_dict['id'] == camera_id:
-            camera_dict['Others'] = new_data.get('Others', camera_dict['Others'])
-            camera_dict['time'] = new_data.get('time', camera_dict['time'])
-            print(f"Updated camera {camera_id} with new data.")
-            break
-    with open('src/marker_positions_rvecs_tvecs.json', 'w') as f:
-        json.dump(marker_positions, f, indent=4)  
+    """
+    Callback function for MQTT messages.
+    Updates the marker positions in the JSON file based on the received message.
+    """
+    try:
+        new_data = json.loads(msg.payload.decode())
+        print(f"Received message from {msg.topic}: {new_data}")
+        new_data_camera_id = int(str(msg.topic)[-1])
+        for camera_dict in marker_positions:
+            if camera_dict['id'] == new_data_camera_id:
+                if camera_dict["time"] == "":
+                    camera_dict['Others'] = new_data.get('Others', camera_dict['Others'])
+                    camera_dict['time'] = new_data.get('time', camera_dict['time'])
+                    #print(f"add marker_positions, message from {new_data_camera_id} : {marker_positions}")
+                    break
+                old_time_stamp = camera_dict["time"]
+                old_time_stamp = datetime.now().strptime(old_time_stamp, "%Y-%m-%d %H:%M:%S")
+                new_time_stamp = new_data["time"] 
+                new_time_stamp = datetime.now().strptime(new_time_stamp, "%Y-%m-%d %H:%M:%S")
+                if old_time_stamp < new_time_stamp:
+                    camera_dict['Others'] = new_data.get('Others', camera_dict['Others'])
+                    camera_dict['time'] = new_data.get('time', camera_dict['time'])
+                    #print(f"update marker_positions, message from {new_data_camera_id} : {marker_positions}")
+                    break
+    except Exception as e:
+        print(f"Error processing message: {e}")
 
+def visualize_camera_positions(df=None, ax=None, fig=None):
+    """
+    Visualizes or updates the positions and viewing directions of the cameras in the XZ-plane.
+    If ax is given, the plot is updated in the same window.
+    Args:
+        df (pd.DataFrame): DataFrame with columns ['id', 'x', 'z', 'dir_x', 'dir_z'].
+        ax (matplotlib.axes.Axes, optional): Axes to update. If None, a new figure is created.
+        fig (matplotlib.figure.Figure, optional): Figure to update. If None, a new figure is created.
+    """
+    ax.cla()  # clear previous plot content
+
+    marker_text_distance = params.WINDOWSIZE / 15
+    cam_text_distance = params.WINDOWSIZE / 50
+    arrow_length = params.WINDOWSIZE / 10
+    arrow_head_width = params.WINDOWSIZE / 30
+    arrow_head_length = params.WINDOWSIZE / 20
+
+    # draw global origin
+    cube = plt.Rectangle((-params.MARKERLENGTH / 2, -params.MARKERLENGTH / 2), params.MARKERLENGTH, params.MARKERLENGTH, color='grey', alpha=1, zorder=4)
+    ax.add_patch(cube)
+    ax.text(marker_text_distance, 0, "M1", fontsize=9, ha='center', va='center', color='black')
+    ax.text(0, -marker_text_distance, "M2", fontsize=9, ha='center', va='center', color='black')
+    ax.text(-marker_text_distance, 0, "M3", fontsize=9, ha='center', va='center', color='black')
+    ax.text(0, marker_text_distance, "M0", fontsize=9, ha='center', va='center', color='black')
+
+    if df is not None:
+        # draw cameras
+        for _, row in df.iterrows():
+            x, z = row['x'], row['z']
+            dx, dz = row['dir_x'], row['dir_z']
+            cam_id = row['id']
+            ax.plot(x, z, 'bo')
+            ax.arrow(x, z, dx * arrow_length, dz * arrow_length, head_width=arrow_head_width, head_length=arrow_head_length, fc='r', ec='r', zorder=4)
+            ax.text(x + cam_text_distance, z + cam_text_distance, f"Cam {int(cam_id)}", fontsize=9)
+
+    ax.set_xlim(-params.WINDOWSIZE, params.WINDOWSIZE)
+    ax.set_ylim(-params.WINDOWSIZE, params.WINDOWSIZE)
+    ax.set_xlabel("X")
+    ax.set_ylabel("Z")
+    ax.set_title("Global Camera Positions and Directions")
+    ax.grid(False, zorder=5)
+    ax.set_aspect('equal')
+
+    plt.tight_layout()
+    plt.show()
+
+#--------------------------------------------------------------------------------#
+# MQTT Setup
+#--------------------------------------------------------------------------------#
 # Client erstellen und verbinden
 client = mqtt.Client()
 client.on_message = on_message
 client.connect(params.BROKER, params.PORT, 60)
 
-# Topic abonnieren
-client.subscribe([(params.TOPIC_1, 1), (params.TOPIC_2, 1), (params.TOPIC_4, 1), (params.TOPIC_6, 1)])
+# subscribe topics of all cameras except the current one
+clients = [(params.TOPIC_1, 1), (params.TOPIC_2, 1), (params.TOPIC_3, 1), (params.TOPIC_4, 1), (params.TOPIC_5, 1), (params.TOPIC_6, 1)]
+clients.pop(params.CAMERA_ID-1)
+client.subscribe(clients)
 client.loop_start()
 
-
-# Load predefined dictionary
-aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_6X6_250)
-parameters = aruco.DetectorParameters()
-detector = aruco.ArucoDetector(aruco_dict, parameters)
 # start the camera stream
 cap = setup_camera_stream()
 
 markers = []
-prev_second = datetime.now().second
+prev_second = datetime.now()
+prev_5_second = datetime.now()
 
-
-legend_elements = [
-    Line2D([0], [0], marker='o', color='w', label='Kamera', markerfacecolor='green', markersize=10),
-    Line2D([0], [0], marker='s', color='w', label='ArUco Marker', markerfacecolor='blue', markersize=10)
-]
-
+# initialize the plot
 plt.ion()
-fig, ax = plt.subplots(figsize=(8, 8))
-ax.set_xlim(-0.1, 0.1)
-ax.set_ylim(-0.1, 0.1)
-ax.set_xlabel("X [m]")
-ax.set_ylabel("Y [m]")
-ax.set_title("Rekonstruiertes Marker-Kamera-Netzwerk")
-ax.grid(True)
+fig, ax = plt.subplots(figsize=(6, 6))
 
+if __name__ == "__main__":
+    while True:
+        now = datetime.now()
 
-while True:
-    now = datetime.now()
+        # 1. get the current frame from the own camera
+        frame, photo_timestamp = get_frame(cap)     
+        cv2.imshow("ESP32 Cam Stream", frame)
 
-    # get the current frame from the camera
-    frame, photo_timestamp = get_frame(cap)     
-    cv2.imshow("ESP32 Cam Stream", frame)
+        # 2. detect markers in the current frame
+        detected_markers = get_marker_detections(frame, photo_timestamp)
 
-    # detect markers in the current frame
-    detected_markers = get_marker_detections(frame, photo_timestamp)
+        # 3. update detected marker objects
+        for new_marker in detected_markers:
+            match_found = False
 
-    # update detected markers
-    for marker in detected_markers:
-        if marker.detected_id in [m.detected_id for m in markers]:
-            # update existing marker
-            existing_marker = next(m for m in markers if m.detected_id == marker.detected_id)
-            existing_marker.update_position()
-        else:
-            markers.append(marker)
-            marker.update_position()
-    detected_markers = []
-    
-    # update markers
-    for marker in markers:
-        time_diff = (now - marker.timestamp).total_seconds()
-        if time_diff > 5:
-            marker.delete_position()
-            markers.remove(marker)
+            for i, existing_marker in enumerate(markers):
+                if existing_marker.detected_id == new_marker.detected_id:
+                    marker_positions = existing_marker.update_position(
+                        marker_positions,
+                        photo_timestamp,
+                        new_marker.rvecs,
+                        new_marker.tvecs
+                    )
+                    match_found = True
+                    break
 
-    # mqtt update and redraw the network every second
-    if now.second != prev_second:           
-        camera_dict = get_camera_dict(params.CAMERA_ID)
-        client.publish(params.TOPIC_5, json.dumps(camera_dict))
-
-
-        with open('src/marker_positions_rvecs_tvecs.json', 'r') as file:
-            data = json.load(file)
-        camera_positions, marker_positions = redraw_marker_camera_network(data)
-        prev_second = now.second
-
-        ax.clear()
-        ax.legend(handles=legend_elements, loc='upper right')
-        ax.set_xlim(-0.1, 0.1)
-        ax.set_ylim(-0.1, 0.1)
-        ax.set_xlabel("X [m]")
-        ax.set_ylabel("Y [m]")
-        ax.set_title("Rekonstruiertes Marker-Kamera-Netzwerk")
-        ax.grid(True)
-
-        for cam_id, pos in camera_positions.items():
-            circle = plt.Circle((pos[0], pos[1]), 0.01, color='green', fill=True)
-            ax.add_patch(circle)
-            # Radius 0.05 m = 5 cm Durchmesser
-            ax.text(pos[0] + 0.001, pos[1] + 0.001, cam_id, color='green')
-
-
-
-        for marker_id, pos in marker_positions.items():
-            ax.plot(pos[0], pos[1], 'bs')
-            ax.text(pos[0] + 0.001, pos[1] + 0.001, marker_id, color='blue')
-
-        fig.suptitle("Verinfachte Annahme: 1.Kamera erkennt ihre Position 2.Kamera richtet sich dort so aus, dass 0 in pos. x-Richtung im Graphen zeigt ", fontsize=10, y=+0.001)
-        fig.canvas.draw()
-        fig.canvas.flush_events()
-
-
-    if cv2.waitKey(10) & 0xFF == ord('q'):
-        break
-
-    # Plotting
-    # plt.figure(figsize=(8, 8))
-    # ax = plt.gca()
-
-    # for cam_id, pos in camera_positions.items():
-    #     circle = plt.Circle((pos[0], pos[1]), 0.05, color='green', fill=True)  # Radius 0.05 m = 10 cm Durchmesser
-    #     ax.add_patch(circle)
-    #     plt.text(pos[0] + 0.05, pos[1] + 0.05, cam_id, color='green')
-
-    # for marker_id, pos in marker_positions.items():
-    #     plt.plot(pos[0], pos[1], 'bs')  # kleiner blauer Punkt
-    #     plt.text(pos[0] + 0.01, pos[1] + 0.01, marker_id, color='blue')
+            if not match_found:
+                markers.append(new_marker)
+                marker_positions = new_marker.update_position(
+                    marker_positions,
+                    photo_timestamp,
+                    new_marker.rvecs,
+                    new_marker.tvecs
+                )
+        detected_markers = [] 
         
-    # legend_elements = [
-    #     Line2D([0], [0], marker='o', color='w', label='Kamera', markerfacecolor='green', markersize=10),
-    #     Line2D([0], [0], marker='s', color='w', label='ArUco Marker', markerfacecolor='blue', markersize=10)
-    # ]
+        # 4. remove markers that have not been updated for more than 5 seconds
+        for marker in markers:
+            if (now - marker.timestamp).total_seconds() > 5:
+                print(f"Removing marker {marker.detected_id} due to inactivity.")
+                marker_positions = marker.delete_position(marker_positions)
+                markers.remove(marker)
 
-    # plt.legend(handles=legend_elements, loc='upper right')
-    # plt.grid(True)
-    # plt.xlabel("x [m]")
-    # plt.ylabel("y [m]")
-    # plt.title("Rekonstruiertes Kamera-ArUco-Marker-Netzwerk")
-    # plt.suptitle("Verinfachte Annahme: 1.Kamera erkennt ihre Position 2.Kamera richtet sich dort so aus, dass 0 in pos. x-Richtung im Graphen zeigt ", fontsize=10, y=+0.001)
-    # plt.axis("equal")
-    # plt.show()
+        # 5. redraw the network every second
+        if (now - prev_second).total_seconds() > 1:
+            global_camera_poses_positions = process_positions(marker_positions)
+            visualize_camera_positions(global_camera_poses_positions, ax, fig)
+            fig.canvas.draw()    
+            fig.canvas.flush_events() 
+            prev_second = datetime.now()
+
+        # 6. publish camera data every 5 seconds
+        if (now - prev_5_second).total_seconds() > 5:
+            camera_dict = get_camera_dict(params.CAMERA_ID, marker_positions)
+            print(camera_dict)
+            if camera_dict["Others"]:
+                client.publish(params.TOPIC_5, json.dumps(camera_dict))
+                print(f"Published data for camera {params.CAMERA_ID} to MQTT broker.: {camera_dict}")
+            prev_5_second = datetime.now()
+            print("5 Seconds")
