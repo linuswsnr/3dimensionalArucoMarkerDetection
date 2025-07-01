@@ -2,85 +2,57 @@
 
 ---
 
-**Project status**: Early development stage
-Multiple student teams are collaboratively building a networked system for marker and camera pose estimation.
-
 <p align="center">
   <img src="PosePositionDetection.jpg" alt="Detection of Marker with Camerar" width="50%">
 </p>
 
-## Project Goal
+## Introduction
 
+The aim of this project is to estimate the 2D positions and orientations (poses) of multiple cameras using ArUco markers. Each camera is equipped with four rigidly mounted markers.
 
-The project aims to develop a system for estimating the 2D positions and orientations (poses) of multiple cameras in a shared global coordinate system using ArUco markers. Each camera is equipped with four rigidly mounted ArUco markers and is capable of:
-
-- Detecting other ArUco markers in a 3D environment
-- Estimating its own pose relative to detected markers
-- Communicating pose information with other cameras via MQTT
-
-A fixed reference cube with four ArUco markers defines the origin and orientation of the global coordinate system. The global camera poses are computed through mutual marker detection and transformation logic.
+- Detecting ArUco markers attached to other cameras or to a fixed reference object
+- Publishing the detection results and its own calculated pose to other teams via MQTT
+- Subscribe to detections from other cameras, which describe marker positions relative to their own local coordinate systems, via MQTT.
+- Although each camera only observes a small part of the environment, a global visualization is constructed by combining local detections with pose data received from other systems.
+- A fixed reference cube with four ArUco markers defines the origin and orientation of the global coordinate system which makes the validation less complicated.
 
 
 ### Global Coordinate System (Top View)
 
-- **X+** points forward  
-- **X−** points backward  
-- **Y+** points right  
-- **Y−** points left  
-
-These directional labels are used **exclusively** for the global coordinate system. Each camera may be arbitrarily rotated within this system.
-
-
-### Camera Marker Placement (relative to camera body)
-
-- **Marker N0**: front side (near the lens), faces in the viewing direction of the camera  
-- **Marker N1**: right side, faces to the right (relative to the camera)  
-- **Marker N2**: back side, faces opposite to the viewing direction  
-- **Marker N3**: left side, faces to the left (relative to the camera)
-
+- **Z+** points forward  
+- **Z−** points backward  
+- **X+** points right  
+- **X−** points left  
 
 ### Reference Cube at the Origin
 
-- Contains four fixed ArUco markers with IDs `0`, `1`, `2`, `3`  
-- **Marker 0**: rear side, visible from the global X+ direction  
-- **Marker 1**: left side, visible from global Y+ direction  
-- **Marker 2**: front side, visible from global X− direction  
-- **Marker 3**: right side, visible from global Y− direction  
+Contains four fixed ArUco markers with IDs `0`, `1`, `2`, `3`  
+- **Marker 0**: rear side, visible from the global X+ direction
+- **Marker 1**: left side, visible from global Y+ direction
+- **Marker 2**: front side, visible from global X− direction
+- **Marker 3**: right side, visible from global Y− direction
 
+### Camera Marker Placement (relative to camera body)
 
-### Detection and Transformation Logic
-
-Each camera can detect markers from other cameras or from the reference cube. From these detections (rotation vector and translation vector), a relative transformation matrix between the camera and the marker can be computed. By incorporating knowledge about the marker's position and orientation on its carrier object (camera or cube), the camera's position and orientation can be derived in the global coordinate system.
-
+- **Marker N0**: front side (near the lens), faces in the viewing direction of the camera
+- **Marker N1**: right side, faces to the right (relative to the camera)
+- **Marker N2**: back side, faces opposite to the viewing direction
+- **Marker N3**: left side, faces to the left (relative to the camera)
+Example: Marker 23 is positioned on the left side of camera 2
 
 ### Initialization and Requirements
 
-- At least one camera must detect one of the reference markers (`0`–`3`) to initialize the global coordinate system.  
-- Other cameras can be localized through transitive connections by detecting markers from already localized cameras.  
-- The system must account for the fact that each camera has its own local coordinate system, which may differ in orientation from the global system.
-
-
-Each team uses an independent setup consisting of an ESP32-CAM (with OV2640 camera) and an ESP32 microcontroller. This repository belongs to **one team** within the larger multi-team project.
-
-
-## Technologies Used
-
-- **Languages**: Python (image processing), C++/Arduino (ESP32)
-- **Libraries**:
-  - `OpenCV` with `cv2.aruco` for marker detection
-  - `paho-mqtt` or `umqtt` for MQTT communication
-- **Hardware**:
-  - ESP32-CAM with OV2640 camera module
-  - 6x6 ArUco markers (maximum marker size: 3 cm)
-
+- At least one camera must detect one of the reference markers (`0`–`3`) to initialize the global coordinate system where our camare has the proirity to define the global origin 
+- Other cameras can be localized through transitive connections by detecting markers from already localized cameras, as already described.  
 
 ## ArUco Marker Basics
 
+- 6x6 ArUco markers (marker size: 2 cm)
 - Each marker encodes a unique ID in a 6x6 bit pattern.
 - A solid black border improves edge detection.
 - Pose (translation and rotation) is calculated using the marker's corners, known size, and intrinsic camera parameters.
 
-## Output of cv2.aruco Marker Detection
+### Output of cv2.aruco Marker Detection
 
 When using ArUco markers for pose estimation, `tvecs` and `rvecs` provide the position and orientation of a marker relative to the camera.
 
@@ -98,14 +70,34 @@ When using ArUco markers for pose estimation, `tvecs` and `rvecs` provide the po
   This can be converted into a 3×3 rotation matrix using the Rodrigues formula.
 
 
-## Task for Each Team
 
-- Detect and localize multiple ArUco markers in space.
-- Estimate the camera's own pose.
-- Share this data via MQTT with other teams.
+## Transformation Logic
+
+Each camera can detect markers from other cameras or from the reference cube. From these detections (rotation vector and translation vector), a relative transformation matrix between the camera and the marker can be computed. By incorporating knowledge about the marker's position and orientation on its carrier object (camera or cube), the camera's position and orientation can be derived in the global coordinate system.
+
+To ensure that all cameras in the network can be localized, even in cases where no direct connection to the reference cube exists, the system iteratively attempts to resolve both from solved and from unsolved cameras. This process is repeated up to n times, where n is the number of cameras which can exist in the network. In our case 7 times because of 7 Student teams each with a camera. In each iteration, newly solved cameras are used to localize additional cameras through known marker positions. This allows indirect pose estimation through chained detections and ensures complete resolution of the network in the worst case.
+
+For all coordinate transformations, 4×4 homogeneous transformation matrices are used. These matrices define the full spatial relationship between the global origin and each individual camera, including both rotation and translation. To compute the transformation from the global reference to a camera, multiple matrices are combined in sequence—for example, by applying known 90°, 180°, or 270° rotations and intermediate transformations from a camera to a detected marker. This chained matrix multiplication ensures that the final transformation correctly represents the camera’s position and orientation relative to the global coordinate system.
+
+For the Theorie of Transformationmatrices have look at:
+https://www.brainvoyager.com/bv/doc/UsersGuide/CoordsAndTransforms/SpatialTransformationMatrices.html
+
+## Technologies Used
+
+Each team uses an independent setup consisting of an ESP32-CAM (with OV2640 camera) and an ESP32 microcontroller and an independent Python Project, hosted with a normal Laptop. This repository belongs to **Team: Linus Wasner, Lukas Bauer** within the larger multi-team project.
+
+
+- **Languages**: Python (image processing), C++/Arduino (ESP32)
+- **Libraries**:
+  - `OpenCV` with `cv2.aruco` for marker detection
+  - `paho-mqtt` for MQTT communication
+  - `numpy` and `pandas` for data processing  
+- **Hardware**:
+  - ESP32-CAM and ESP32 
 
 
 ## Contributors
 
 Multiple teams from the university courses **"Optical Sensor Systems"** and **"Real-Time Systems"** are collaborating on this project.  
-This repository documents the progress of **one** of these teams.
+Spervising professor: Prof. Dr. Tim Poguntke
+
