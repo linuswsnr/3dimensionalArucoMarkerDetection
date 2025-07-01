@@ -3,7 +3,7 @@
 ---
 
 <p align="center">
-  <img src="Arucomarker.png" alt="Detection of Marker with Camerar" width="50%">
+  <img src="PosePositionDetection.jpg" alt="Detection of Marker with Camera" width="50%">
 </p>
 
 ## Introduction
