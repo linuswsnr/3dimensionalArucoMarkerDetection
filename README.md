@@ -53,7 +53,7 @@ Example: Marker 23 is positioned on the left side of camera 2
 - Pose (translation and rotation) is calculated using the marker's corners, known size, and intrinsic camera parameters.
 
 <p align="center">
-  <img src="Arucomarker.jpg" alt="Arucomarker" width="50%">
+  <img src="Arucomarker.png" alt="Arucomarker" width="50%">
 </p>
 
 ### Output of cv2.aruco Marker Detection
