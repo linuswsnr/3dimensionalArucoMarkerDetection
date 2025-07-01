@@ -3,7 +3,7 @@
 ---
 
 <p align="center">
-  <img src="PosePositionDetection.jpg" alt="Detection of Marker with Camerar" width="50%">
+  <img src="Arucomarker.png" alt="Detection of Marker with Camerar" width="50%">
 </p>
 
 ## Introduction
@@ -82,7 +82,7 @@ Each camera can detect markers from other cameras or from the reference cube. Fr
 To ensure that all cameras in the network can be localized, even in cases where no direct connection to the reference cube exists, the system iteratively attempts to resolve both from solved and from unsolved cameras. This process is repeated up to n times, where n is the number of cameras which can exist in the network. In our case 7 times because of 7 Student teams each with a camera. In each iteration, newly solved cameras are used to localize additional cameras through known marker positions. This allows indirect pose estimation through chained detections and ensures complete resolution of the network in the worst case.
 
 <p align="center">
-  <img src="solvingCameras.jpg" alt="Detection of Marker with Camerar" width="50%">
+  <img src="solvingCameras.png" alt="Detection of Marker with Camerar" width="50%">
 </p>
 
 For all coordinate transformations, 4×4 homogeneous transformation matrices are used. These matrices define the full spatial relationship between the global origin and each individual camera, including both rotation and translation. To compute the transformation from the global reference to a camera, multiple matrices are combined in sequence—for example, by applying known 90°, 180°, or 270° rotations and intermediate transformations from a camera to a detected marker. This chained matrix multiplication ensures that the final transformation correctly represents the camera’s position and orientation relative to the global coordinate system.
