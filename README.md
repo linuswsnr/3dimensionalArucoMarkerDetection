@@ -3,7 +3,8 @@
 ---
 
 <p align="center">
-  <img src="pictures\PosePositionDetection.jpg" alt="Detection of Marker with Camera" width="50%">
+  <img src="pictures\PosePositionDetection.jpg" alt="Detection of Marker with Camera" width="25%">
+  <img src="pictures\Detection6.jpg" alt="Detection of cameras5" width="45%">
 </p>
 
 ## Introduction
@@ -93,7 +94,8 @@ https://www.brainvoyager.com/bv/doc/UsersGuide/CoordsAndTransforms/SpatialTransf
 ## Visualisation
 
 The camera visualization shows the positions and viewing directions of all cameras in the global coordinate system. Each camera is represented as an arrow in the XZ plane, with the arrowhead indicating the viewing direction. The visualization is based on transformation matrices derived from detected ArUco markers. This allows for quick verification of the spatial arrangement and orientation of all cameras.
-
+<br>
+<br>
 <p align="center">
   <img src="pictures\Visualisation.jpg" alt="Visualisation" width="50%">
 </p>
@@ -118,4 +120,13 @@ Each team uses an independent setup consisting of an ESP32-CAM (with OV2640 came
 
 Multiple teams from the university courses **"Optical Sensor Systems"** and **"Real-Time Systems"** are collaborating on this project.  
 Spervising professor: Prof. Dr. Tim Poguntke
+
+## Pictures
+
+<p align="center">
+  <img src="pictures\Detection1.jpg" alt="Detection of cameras1" width="45%">
+  <img src="pictures\Detection2.jpg" alt="Detection of cameras2" width="45%">
+  <img src="pictures\Detection3.jpg" alt="Detection of cameras3" width="45%">
+  <img src="pictures\Detection4.jpg" alt="Detection of cameras4" width="45%">
+</p>
 
