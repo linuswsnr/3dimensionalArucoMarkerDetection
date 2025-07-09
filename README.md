@@ -81,7 +81,7 @@ When using ArUco markers for pose estimation, `tvecs` and `rvecs` provide the po
 Each camera can detect markers from other cameras or from the reference cube. From these detections (rotation vector and translation vector), a relative transformation matrix between the camera and the marker can be computed. By incorporating knowledge about the marker's position and orientation on its carrier object (camera or cube), the camera's position and orientation can be derived in the global coordinate system.
 
 <p align="center">
-  <img src="pictures\Transformationmatrix.png" alt="Transformationmatrix.png" width="50%">
+  <img src="pictures\TransformationMatrix.png" alt="Transformationmatrix.png" width="30%">
 </p>
 
 To ensure that all cameras in the network can be localized, even in cases where no direct connection to the reference cube exists, the system iteratively attempts to resolve both from solved and from unsolved cameras. This process is repeated up to n times, where n is the number of cameras which can exist in the network. In our case 7 times because of 7 Student teams each with a camera. In each iteration, newly solved cameras are used to localize additional cameras through known marker positions. This allows indirect pose estimation through chained detections and ensures complete resolution of the network in the worst case.
